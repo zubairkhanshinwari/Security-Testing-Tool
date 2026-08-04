@@ -1,0 +1,14 @@
+{
+  "id": "xss",
+  "name": "Cross-Site Scripting (XSS)",
+  "version": "1.0.0",
+  "description": "Safe reflected XSS detection using alert-free markers across query params and forms (non-destructive).",
+  "category": "Injection",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["xss", "owasp_top10"],
+  "owasp": ["A03:2021-Injection"],
+  "cwe": ["CWE-79"],
+  "modes": ["passive", "active-safe", "authenticated"],
+  "tags": ["xss", "injection", "owasp", "cwe-79"]
+}

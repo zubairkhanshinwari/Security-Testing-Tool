@@ -1,0 +1,14 @@
+{
+  "id": "security-headers",
+  "name": "HTTP Header Security",
+  "version": "2.0.0",
+  "description": "Passive review of CSP, HSTS, X-Content-Type-Options, X-Frame-Options, and related headers.",
+  "category": "Config",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["http_headers", "security_misconfig", "clickjacking", "owasp_top10"],
+  "owasp": ["A05:2021-Security Misconfiguration"],
+  "cwe": ["CWE-693"],
+  "modes": ["passive", "active-safe"],
+  "tags": ["headers", "passive"]
+}

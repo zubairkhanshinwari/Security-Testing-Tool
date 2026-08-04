@@ -1,0 +1,14 @@
+{
+  "id": "ssrf",
+  "name": "SSRF",
+  "version": "1.0.0",
+  "description": "Safe SSRF sink discovery and non-destructive probe of URL-like parameters (no cloud metadata hammering).",
+  "category": "Injection",
+  "enabledByDefault": true,
+  "recommended": false,
+  "securityTypeIds": ["ssrf", "owasp_top10"],
+  "owasp": ["A10:2021-Server-Side Request Forgery"],
+  "cwe": ["CWE-918"],
+  "modes": ["active-safe", "authenticated"],
+  "tags": ["ssrf", "injection", "owasp"]
+}

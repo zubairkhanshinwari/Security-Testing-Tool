@@ -1,0 +1,8 @@
+{
+  "reflected": [
+    "<svg/onload=/**/('__MARKER__')>",
+    "\"><sa-xss __MARKER__=1>",
+    "'\"><img src=x onerror=/**/('__MARKER__')>",
+    "__MARKER__'\"><b>"
+  ]
+}

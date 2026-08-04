@@ -1,0 +1,31 @@
+{
+  "modes": {
+    "passive": {
+      "description": "Headers, cookies, TLS, robots, sitemap, info disclosure — no payload injection",
+      "injectPayloads": false,
+      "authenticated": "optional"
+    },
+    "active-safe": {
+      "description": "Non-destructive verification payloads only (default)",
+      "injectPayloads": true,
+      "destructive": false,
+      "rateLimited": true,
+      "authenticated": "optional"
+    },
+    "authenticated": {
+      "description": "Uses provided credentials/tokens for protected endpoints",
+      "requiresCredentials": true,
+      "injectPayloads": true,
+      "destructive": false
+    }
+  },
+  "forbidden": [
+    "malware_upload",
+    "persistence",
+    "privilege_escalation",
+    "destructive_payloads",
+    "unbounded_flood",
+    "automated_exploitation_beyond_confirmation"
+  ],
+  "authorizationBanner": "Use only against systems you own or are explicitly authorized to test."
+}

@@ -1,0 +1,30 @@
+# Dependencies & build
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Local scan outputs (may contain target URLs / auth context)
+reports/*
+!reports/.gitkeep
+data/projects/*
+!data/projects/.gitkeep
+data/scans/*
+!data/scans/.gitkeep
+SQL-Injection-Assessment-Report.*
+*-Assessment-Report.*
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Playwright / MCP artifacts
+.playwright-mcp/
+test-results/
+playwright-report/
+blob-report/

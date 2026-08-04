@@ -1,0 +1,14 @@
+{
+  "id": "nosql-injection",
+  "name": "NoSQL Injection",
+  "version": "2.0.0",
+  "description": "Detects NoSQL operator / regex injection in MongoDB-style APIs.",
+  "category": "Injection",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["nosqli", "owasp_top10"],
+  "owasp": ["A03:2021-Injection"],
+  "cwe": ["CWE-943"],
+  "modes": ["active-safe", "authenticated"],
+  "tags": ["nosql", "mongodb", "injection"]
+}

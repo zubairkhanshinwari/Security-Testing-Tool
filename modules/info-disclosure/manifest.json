@@ -1,0 +1,13 @@
+{
+  "id": "info-disclosure",
+  "name": "Information Disclosure",
+  "version": "2.0.0",
+  "description": "Checks for exposed .env, source maps, directory listing, and security.txt presence.",
+  "category": "Config",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["info_disclosure", "sensitive_data", "owasp_top10"],
+  "owasp": ["A01:2021-Broken Access Control", "A05:2021-Security Misconfiguration"],
+  "cwe": ["CWE-200", "CWE-209"],
+  "modes": ["passive"]
+}

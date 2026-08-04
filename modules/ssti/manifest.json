@@ -1,0 +1,14 @@
+{
+  "id": "ssti",
+  "name": "Server-Side Template Injection",
+  "version": "1.0.0",
+  "description": "Safe SSTI polyglot probes (math expressions only — non-destructive).",
+  "category": "Injection",
+  "enabledByDefault": false,
+  "recommended": false,
+  "securityTypeIds": ["ssti"],
+  "owasp": ["A03:2021-Injection"],
+  "cwe": ["CWE-1336", "CWE-94"],
+  "modes": ["active-safe", "authenticated"],
+  "tags": ["ssti", "injection", "template"]
+}

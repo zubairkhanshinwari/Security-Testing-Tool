@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecureAssess Platform</title>
+  <style>
+    :root {
+      --navy: #0b1f3a;
+      --accent: #1f6feb;
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --line: #dbe3ef;
+      --text: #0f172a;
+      --muted: #64748b;
+      --ok: #059669;
+      --warn: #9a3412;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #dbeafe 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #e2e8f0 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+    .hero {
+      background: linear-gradient(145deg, #0b1f3a, #12355b 60%, #1e4976);
+      color: #fff;
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+      margin-bottom: 22px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    .hero p { margin: 0; opacity: 0.9; line-height: 1.5; }
+    .badge {
+      display: inline-block; margin-top: 14px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 999px; padding: 4px 10px; font-size: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+    label.field {
+      display: block; font-size: 13px; font-weight: 600;
+      color: var(--navy); margin: 14px 0 6px;
+    }
+    input[type="text"], input[type="url"], input[type="password"], select {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px;
+      padding: 11px 12px; font-size: 14px; outline: none; background: #fff;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31,111,235,0.15); }
+    .password-field { position: relative; }
+    .password-field input {
+      padding-right: 44px;
+    }
+    .password-toggle {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      width: 34px; height: 34px; margin: 0; padding: 0;
+      border: none; border-radius: 8px; background: transparent;
+      color: var(--muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .password-toggle:hover { color: var(--navy); background: #f1f5f9; }
+    .password-toggle:focus-visible {
+      outline: none; color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(31,111,235,0.15);
+    }
+    .password-toggle svg { width: 18px; height: 18px; display: block; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+    .auth-box {
+      margin-top: 8px; padding: 12px; border-radius: 10px;
+      background: #eff6ff; border: 1px solid #bfdbfe; font-size: 12px; color: #1e3a8a;
+    }
+    .check-auth {
+      display: flex; gap: 10px; align-items: flex-start;
+      margin-top: 16px; padding: 12px; border-radius: 10px;
+      background: #fff7ed; border: 1px solid #fdba74; color: var(--warn); font-size: 13px;
+    }
+    .check-auth input { margin-top: 3px; }
+    .sec-head {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; margin-top: 18px; flex-wrap: wrap;
+    }
+    .sec-head h3 { margin: 0; color: var(--navy); font-size: 15px; }
+    .sec-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sec-actions button {
+      width: auto; margin: 0; padding: 7px 10px; font-size: 12px;
+      background: #e2e8f0; color: var(--navy);
+    }
+    .sec-actions button.primary { background: var(--accent); color: #fff; }
+    .types {
+      margin-top: 10px; max-height: 340px; overflow: auto;
+      border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+      background: #f8fafc;
+    }
+    .type-item {
+      display: grid; grid-template-columns: 22px 1fr; gap: 8px;
+      padding: 8px 8px; border-radius: 8px;
+    }
+    .type-item:hover { background: #fff; }
+    .type-item.recommended { background: #ecfdf5; }
+    .type-item.is-checked:not(.recommended) { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .type-item .name { font-weight: 650; font-size: 13px; color: var(--navy); }
+    .type-item .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .type-item .tag {
+      display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
+      color: #065f46; background: #d1fae5; border-radius: 999px; padding: 1px 6px;
+    }
+    .group-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); font-weight: 700; margin: 10px 8px 4px;
+    }
+    button#startBtn {
+      margin-top: 18px; width: 100%; border: 0; border-radius: 12px;
+      padding: 13px 16px; background: var(--accent); color: #fff;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .status, .result, .error {
+      margin-top: 14px; border-radius: 12px; padding: 14px; display: none;
+    }
+    .status.show, .result.show, .error.show { display: block; }
+    .status { border: 1px solid var(--line); background: #f8fafc; }
+    .status .stage { font-weight: 700; color: var(--navy); }
+    .status .msg { color: var(--muted); margin-top: 4px; font-size: 14px; }
+    .result { border: 1px solid #a7f3d0; background: #ecfdf5; }
+    .result a {
+      display: inline-block; margin: 8px 10px 0 0; padding: 8px 12px;
+      border-radius: 8px; background: var(--navy); color: #fff;
+      text-decoration: none; font-size: 13px; font-weight: 600;
+    }
+    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+    .kpi { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
+    .kpi b { display: block; font-size: 18px; color: var(--navy); }
+    .kpi span { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+    footer { margin-top: 18px; color: var(--muted); font-size: 12px; text-align: center; }
+    @media (max-width: 700px) {
+      .row, .kpis { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>SecureAssess Platform</h1>
+      <p>
+        Enterprise authorized security assessment — plugin-based modules, OWASP/CWE/CVSS mapping,
+        optional login, and multi-format reports (HTML, PDF, JSON, SARIF, CSV, JUnit).
+      </p>
+      <div class="badge">Authorized only · Non-destructive · Plugin architecture · <a href="/dashboard.html" style="color:#fff">Open Dashboard</a></div>
+    </div>
+
+    <div class="card">
+      <form id="scanForm">
+        <label class="field" for="targetUrl">Target URL *</label>
+        <input id="targetUrl" type="url" placeholder="https://dev.example.com/" required />
+
+        <div class="row">
+          <div>
+            <label class="field" for="projectName">Project Name</label>
+            <input id="projectName" type="text" value="Web Security Assessment" />
+          </div>
+          <div>
+            <label class="field" for="environment">Environment</label>
+            <select id="environment">
+              <option>Development</option>
+              <option>Staging</option>
+              <option>QA</option>
+              <option>Production (authorized only)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label class="field" for="scanProfile">Scan profile</label>
+            <select id="scanProfile">
+              <option value="quick">Quick — faster smoke (~2–4 min)</option>
+              <option value="standard" selected>Standard — balanced (default)</option>
+              <option value="deep">Deep — broader crawl/probes</option>
+            </select>
+            <p class="hint">Quick for smoke checks; Standard for most assessments; Deep when you need more coverage.</p>
+          </div>
+          <div></div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label class="field" for="testerName">Tester Name</label>
+            <input id="testerName" type="text" value="Security Assessment Tool" />
+          </div>
+          <div>
+            <label class="field" for="username">Username / Email (optional)</label>
+            <input id="username" type="text" placeholder="user@example.com" autocomplete="username" />
+          </div>
+        </div>
+
+        <label class="field" for="password">Password (optional)</label>
+        <div class="password-field">
+          <input id="password" type="password" placeholder="Used only to obtain a session token for authenticated testing" autocomplete="current-password" />
+          <button type="button" id="togglePassword" class="password-toggle" aria-label="Show password" title="Show password" aria-pressed="false">
+            <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <div class="auth-box">
+          Username and password are optional. If provided, the tool will attempt login against discovered
+          auth APIs, obtain a token, and complete authenticated analysis.
+        </div>
+
+        <div class="sec-head">
+          <h3>Type of Security Testing</h3>
+          <div class="sec-actions">
+            <button type="button" id="btnRecommended" class="primary">Select recommended</button>
+            <button type="button" id="btnAll">Select all</button>
+            <button type="button" id="btnNone">Clear</button>
+          </div>
+        </div>
+        <p class="hint">
+          Recommended types (green) are pre-selected for typical websites — OWASP Top 10 aligned.
+          Use <strong>Select all</strong> to include every security testing type (not only recommended).
+        </p>
+        <p class="hint" id="selectedCount" style="font-weight:700;color:var(--navy)">0 of 0 security types selected</p>
+        <div id="typesBox" class="types">Loading security testing types…</div>
+
+        <div class="check-auth">
+          <input id="authorized" type="checkbox" required />
+          <label for="authorized" style="margin:0;font-weight:500;color:inherit">
+            I own this target or have written authorization to perform security testing.
+            I understand probes are non-destructive but may generate application errors/logs.
+          </label>
+        </div>
+
+        <div class="check-auth" style="margin-top:10px">
+          <input id="incremental" type="checkbox" />
+          <label for="incremental" style="margin:0;font-weight:500;color:inherit">
+            Incremental scan — reuse project baseline; prioritize new endpoints and previously confirmed issues.
+          </label>
+        </div>
+
+        <button id="startBtn" type="submit">Start Assessment &amp; Generate Report</button>
+      </form>
+
+      <div id="statusBox" class="status">
+        <div class="stage" id="stageText">Starting…</div>
+        <div class="msg" id="msgText">Please wait while the scanner runs.</div>
+        <div class="hint" id="bgHint" style="display:none;margin-top:10px">
+          You can open the <a href="/dashboard.html">Dashboard</a> anytime — the assessment keeps running in the background and will continue when you return here.
+        </div>
+      </div>
+      <div id="errorBox" class="error"></div>
+      <div id="resultBox" class="result">
+        <strong>Report ready</strong>
+        <div class="kpis">
+          <div class="kpi"><b id="kpiFindings">0</b><span>Findings</span></div>
+          <div class="kpi"><b id="kpiRisk">—</b><span>Risk</span></div>
+          <div class="kpi"><b id="kpiScore">—</b><span>Score</span></div>
+          <div class="kpi"><b id="kpiTypes">—</b><span>Types</span></div>
+        </div>
+        <div>
+          <a id="pdfLink" href="#" target="_blank">Download PDF</a>
+          <a id="htmlLink" href="#" target="_blank">Open HTML</a>
+          <a id="jsonLink" href="#" target="_blank">Raw JSON</a>
+          <a id="sarifLink" href="#" target="_blank">SARIF</a>
+          <a id="csvLink" href="#" target="_blank">CSV</a>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Safe techniques only. Do not use against systems without permission.
+      DoS/flood and destructive exploit testing are not performed by this tool.
+    </footer>
+  </div>
+
+  <script>
+    const ACTIVE_JOB_KEY = 'secureassess.activeJob';
+    const LAST_JOB_KEY = 'secureassess.lastJob';
+    const SELECTED_TYPES_KEY = 'secureassess.selectedTypes';
+    const form = document.getElementById('scanForm');
+    const startBtn = document.getElementById('startBtn');
+    const statusBox = document.getElementById('statusBox');
+    const resultBox = document.getElementById('resultBox');
+    const errorBox = document.getElementById('errorBox');
+    const typesBox = document.getElementById('typesBox');
+    const bgHint = document.getElementById('bgHint');
+    const authorizedEl = document.getElementById('authorized');
+    let catalog = [];
+    let pollTimer = null;
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.add('show');
+    }
+
+    function saveActiveJob(job) {
+      localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify(job));
+    }
+    function clearActiveJob() {
+      localStorage.removeItem(ACTIVE_JOB_KEY);
+    }
+    function getActiveJob() {
+      try { return JSON.parse(localStorage.getItem(ACTIVE_JOB_KEY) || 'null'); }
+      catch { return null; }
+    }
+    function saveLastJob(jobId) {
+      localStorage.setItem(LAST_JOB_KEY, jobId);
+      clearActiveJob();
+    }
+
+    function selectedTypes() {
+      return [...typesBox.querySelectorAll('input[type=checkbox][data-id]:checked')].map((el) => el.dataset.id);
+    }
+
+    function persistSelection(ids) {
+      const list = Array.isArray(ids) ? ids : selectedTypes();
+      localStorage.setItem(SELECTED_TYPES_KEY, JSON.stringify(list));
+    }
+
+    function loadPersistedSelection() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(SELECTED_TYPES_KEY) || 'null');
+        return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : null;
+      } catch {
+        return null;
+      }
+    }
+
+    /** Restore exact user selection (Select all / custom). Never force recommended-only. */
+    function applySelection(ids, { persist = true } = {}) {
+      if (!Array.isArray(ids) || !ids.length) return false;
+      const want = new Set(ids);
+      let matched = 0;
+      typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
+        el.checked = want.has(el.dataset.id);
+        if (el.checked) matched += 1;
+        const item = catalog.find((t) => t.id === el.dataset.id);
+        const row = el.closest('.type-item');
+        if (!row) return;
+        row.classList.toggle('recommended', !!item?.recommended);
+        row.classList.toggle('is-checked', el.checked);
+      });
+      updateSelectedCount();
+      if (persist) persistSelection(ids);
+      return matched > 0;
+    }
+
+    function updateSelectedCount() {
+      const n = selectedTypes().length;
+      const total = catalog.length || typesBox.querySelectorAll('input[type=checkbox][data-id]').length;
+      const el = document.getElementById('selectedCount');
+      if (!el) return;
+      const mode =
+        total && n >= total ? ' (ALL types)' :
+        n && catalog.length && n === catalog.filter((t) => t.recommended).length ? ' (recommended set)' :
+        '';
+      el.textContent = `${n} of ${total} security types selected${mode}`;
+    }
+
+    function setChecked(predicate) {
+      typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
+        const item = catalog.find((t) => t.id === el.dataset.id);
+        el.checked = Boolean(predicate(item));
+        const row = el.closest('.type-item');
+        if (!row) return;
+        row.classList.toggle('recommended', !!item?.recommended);
+        row.classList.toggle('is-checked', el.checked);
+      });
+      updateSelectedCount();
+      persistSelection();
+    }
+
+    function renderTypes(types, preferredIds) {
+      catalog = types;
+      const groups = {};
+      for (const t of types) {
+        (groups[t.group] ||= []).push(t);
+      }
+      // Default checked state only used when there is no saved selection
+      const saved = preferredIds || loadPersistedSelection();
+      const useSaved = Array.isArray(saved) && saved.length > 0;
+      const savedSet = useSaved ? new Set(saved) : null;
+
+      typesBox.innerHTML = Object.entries(groups).map(([group, items]) => {
+        return `<div class="group-title">${group}</div>` + items.map((t) => {
+          const checked = useSaved ? savedSet.has(t.id) : !!t.recommended;
+          return `
+          <label class="type-item ${t.recommended ? 'recommended' : ''} ${checked ? 'is-checked' : ''}">
+            <input type="checkbox" data-id="${t.id}" ${checked ? 'checked' : ''} />
+            <span>
+              <span class="name">${t.name}${t.recommended ? '<span class="tag">Recommended</span>' : ''}</span>
+              <div class="desc">${t.description} <em>Ex: ${t.example}</em></div>
+            </span>
+          </label>`;
+        }).join('');
+      }).join('');
+      typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
+        el.addEventListener('change', () => {
+          el.closest('.type-item')?.classList.toggle('is-checked', el.checked);
+          updateSelectedCount();
+          persistSelection();
+        });
+      });
+      updateSelectedCount();
+      if (useSaved) persistSelection(saved);
+    }
+
+    async function loadTypes(preferredIds) {
+      try {
+        const res = await fetch('/api/security-types');
+        const data = await res.json();
+        renderTypes(data.types || [], preferredIds);
+      } catch (e) {
+        typesBox.textContent = 'Failed to load security types: ' + e.message;
+      }
+    }
+
+    const btnRecommended = document.getElementById('btnRecommended');
+    const btnAll = document.getElementById('btnAll');
+    const btnNone = document.getElementById('btnNone');
+    btnRecommended.onclick = () => setChecked((t) => !!t?.recommended);
+    btnAll.onclick = () => {
+      const allIds = [...typesBox.querySelectorAll('input[type=checkbox][data-id]')].map((el) => el.dataset.id);
+      applySelection(allIds);
+    };
+    btnNone.onclick = () => setChecked(() => false);
+
+    function setTypeControlsDisabled(disabled) {
+      btnRecommended.disabled = disabled;
+      btnAll.disabled = disabled;
+      btnNone.disabled = disabled;
+      if (disabled) {
+        authorizedEl.dataset.wasChecked = authorizedEl.checked ? '1' : '0';
+      } else if (authorizedEl.dataset.wasChecked === '1') {
+        authorizedEl.checked = true;
+      }
+      authorizedEl.disabled = disabled;
+      typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
+        el.disabled = disabled;
+      });
+    }
+
+    function showRunningUi(message) {
+      errorBox.classList.remove('show');
+      resultBox.classList.remove('show');
+      statusBox.classList.add('show');
+      bgHint.style.display = 'block';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Scanning in background…';
+      setTypeControlsDisabled(true);
+      document.getElementById('stageText').textContent = 'RUNNING';
+      document.getElementById('msgText').textContent = message || 'Assessment is running…';
+    }
+
+    function applyCompletedJob(job) {
+      bgHint.style.display = 'none';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start Assessment & Generate Report';
+      setTypeControlsDisabled(false);
+      statusBox.classList.add('show');
+      document.getElementById('stageText').textContent = 'DONE';
+      document.getElementById('msgText').textContent = 'Assessment complete. Reports are ready.';
+      resultBox.classList.add('show');
+      document.getElementById('kpiFindings').textContent = job.stats?.totalFindings ?? 0;
+      document.getElementById('kpiRisk').textContent = job.stats?.overallRisk || '—';
+      document.getElementById('kpiScore').textContent = (job.stats?.securityScore ?? '—') + '/100';
+      const usedTypes =
+        job.meta?.securityTypesRequested ||
+        job.meta?.securityTypes ||
+        loadPersistedSelection() ||
+        [];
+      document.getElementById('kpiTypes').textContent =
+        job.meta?.securityTypesCount || usedTypes.length || '—';
+      // Keep the user's actual selection (e.g. Select all), do not reset to recommended
+      if (usedTypes.length) applySelection(usedTypes);
+      authorizedEl.checked = true;
+      const files = job.files || {};
+      document.getElementById('pdfLink').href = files.pdf || '#';
+      document.getElementById('htmlLink').href = files.html || '#';
+      document.getElementById('jsonLink').href = files.json || '#';
+      document.getElementById('sarifLink').href = files.sarif || '#';
+      document.getElementById('csvLink').href = files.csv || '#';
+      if (job.targetUrl) document.getElementById('targetUrl').value = job.targetUrl;
+      if (job.projectName) document.getElementById('projectName').value = job.projectName;
+      if (job.meta?.projectName) document.getElementById('projectName').value = job.meta.projectName;
+    }
+
+    async function poll(jobId) {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      try {
+        const res = await fetch('/api/scan/' + jobId);
+        if (res.status === 404) {
+          clearActiveJob();
+          startBtn.disabled = false;
+          startBtn.textContent = 'Start Assessment & Generate Report';
+          setTypeControlsDisabled(false);
+          bgHint.style.display = 'none';
+          showError('Previous assessment job was lost (server restarted). Start a new assessment.');
+          return;
+        }
+        const job = await res.json();
+        document.getElementById('stageText').textContent = (job.progress?.stage || job.status || '').toUpperCase();
+        document.getElementById('msgText').textContent = job.progress?.message || job.status;
+        statusBox.classList.add('show');
+        bgHint.style.display = job.status === 'running' ? 'block' : 'none';
+
+        if (job.status === 'completed') {
+          saveLastJob(jobId);
+          applyCompletedJob(job);
+          return;
+        }
+        if (job.status === 'failed') {
+          clearActiveJob();
+          startBtn.disabled = false;
+          startBtn.textContent = 'Start Assessment & Generate Report';
+          setTypeControlsDisabled(false);
+          bgHint.style.display = 'none';
+          showError(job.error || 'Scan failed');
+          return;
+        }
+
+        startBtn.disabled = true;
+        startBtn.textContent = 'Scanning in background…';
+        setTypeControlsDisabled(true);
+        pollTimer = setTimeout(() => poll(jobId), 1500);
+      } catch (err) {
+        // Network blip — keep trying; server scan continues
+        pollTimer = setTimeout(() => poll(jobId), 2500);
+      }
+    }
+
+    async function resumeJobIfAny() {
+      const active = getActiveJob();
+      if (active?.jobId) {
+        if (Array.isArray(active.securityTypes) && active.securityTypes.length) {
+          applySelection(active.securityTypes);
+        }
+        showRunningUi('Resuming assessment progress…');
+        if (active.targetUrl) document.getElementById('targetUrl').value = active.targetUrl;
+        if (active.projectName) document.getElementById('projectName').value = active.projectName;
+        authorizedEl.checked = true;
+        authorizedEl.dataset.wasChecked = '1';
+        poll(active.jobId);
+        return;
+      }
+
+      const lastId = localStorage.getItem(LAST_JOB_KEY);
+      if (!lastId) return;
+      try {
+        const res = await fetch('/api/scan/' + lastId);
+        if (!res.ok) return;
+        const job = await res.json();
+        if (job.status === 'completed') applyCompletedJob(job);
+        else if (job.status === 'running') {
+          const types = job.meta?.securityTypesRequested || loadPersistedSelection() || [];
+          saveActiveJob({
+            jobId: lastId,
+            targetUrl: job.targetUrl,
+            projectName: job.projectName,
+            securityTypes: types,
+          });
+          if (types.length) applySelection(types);
+          showRunningUi('Assessment still running…');
+          poll(lastId);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.classList.remove('show');
+      resultBox.classList.remove('show');
+      statusBox.classList.add('show');
+
+      const types = selectedTypes();
+      const authorized = authorizedEl.checked;
+      if (!types.length) {
+        showError('Select at least one security testing type.');
+        return;
+      }
+      if (!authorized) {
+        showError('Confirm authorization before scanning.');
+        return;
+      }
+
+      persistSelection(types);
+      startBtn.disabled = true;
+      startBtn.textContent = 'Scanning…';
+      setTypeControlsDisabled(true);
+
+      const payload = {
+        targetUrl: document.getElementById('targetUrl').value.trim(),
+        projectName: document.getElementById('projectName').value.trim(),
+        environment: document.getElementById('environment').value,
+        testerName: document.getElementById('testerName').value.trim(),
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value,
+        securityTypes: types,
+        incremental: document.getElementById('incremental').checked,
+        profile: document.getElementById('scanProfile').value || 'standard',
+        authorized: true,
+      };
+      document.getElementById('msgText').textContent =
+        `Starting with ${types.length} selected security type(s)${types.length >= catalog.length ? ' (ALL)' : ''}…`;
+
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to start scan');
+        localStorage.removeItem(LAST_JOB_KEY);
+        saveActiveJob({
+          jobId: data.jobId,
+          targetUrl: payload.targetUrl,
+          projectName: payload.projectName,
+          projectId: data.projectId,
+          securityTypes: types,
+          startedAt: new Date().toISOString(),
+        });
+        applySelection(types);
+        showRunningUi(
+          `Assessment started with ${types.length} type(s)${types.length >= catalog.length ? ' — ALL types' : ''}. Safe to open Dashboard.`,
+        );
+        poll(data.jobId);
+      } catch (err) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Assessment & Generate Report';
+        setTypeControlsDisabled(false);
+        applySelection(types);
+        bgHint.style.display = 'none';
+        showError(err.message);
+      }
+    });
+
+    (function wirePasswordToggle() {
+      const input = document.getElementById('password');
+      const btn = document.getElementById('togglePassword');
+      const icon = document.getElementById('eyeIcon');
+      if (!input || !btn || !icon) return;
+
+      const eyeOpen =
+        '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>';
+      const eyeOff =
+        '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.77 21.77 0 0 1 5.06-5.94"/>' +
+        '<path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.8 21.8 0 0 1-2.16 3.19"/>' +
+        '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+
+      btn.addEventListener('click', () => {
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        btn.title = show ? 'Hide password' : 'Show password';
+        icon.innerHTML = show ? eyeOff : eyeOpen;
+      });
+    })();
+
+    loadTypes().then(() => resumeJobIfAny());
+  </script>
+</body>
+</html>

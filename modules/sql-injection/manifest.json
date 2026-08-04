@@ -1,0 +1,14 @@
+{
+  "id": "sql-injection",
+  "name": "SQL Injection",
+  "version": "2.0.0",
+  "description": "Safe SQLi detection: error-based, boolean, and time-based probes (non-destructive).",
+  "category": "Injection",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["sqli", "owasp_top10"],
+  "owasp": ["A03:2021-Injection"],
+  "cwe": ["CWE-89"],
+  "modes": ["active-safe", "authenticated"],
+  "tags": ["injection", "database", "owasp"]
+}

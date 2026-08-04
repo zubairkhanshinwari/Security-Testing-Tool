@@ -1,0 +1,14 @@
+{
+  "id": "open-redirect",
+  "name": "Open Redirect",
+  "version": "1.0.0",
+  "description": "Safe open-redirect checks via redirect-style query parameters (maxRedirects=0, non-destructive).",
+  "category": "Validation",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["open_redirect", "owasp_top10"],
+  "owasp": ["A01:2021-Broken Access Control"],
+  "cwe": ["CWE-601"],
+  "modes": ["passive", "active-safe", "authenticated"],
+  "tags": ["redirect", "validation", "owasp"]
+}

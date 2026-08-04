@@ -1,0 +1,14 @@
+{
+  "id": "cookie-security",
+  "name": "Cookie Security",
+  "version": "1.0.0",
+  "description": "Reviews Set-Cookie flags: Secure, HttpOnly, SameSite (non-destructive).",
+  "category": "Session",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["cookie_security", "owasp_top10"],
+  "owasp": ["A05:2021-Security Misconfiguration", "A07:2021-Identification and Authentication Failures"],
+  "cwe": ["CWE-614", "CWE-1004"],
+  "modes": ["passive", "active-safe", "authenticated"],
+  "tags": ["cookies", "session", "owasp"]
+}

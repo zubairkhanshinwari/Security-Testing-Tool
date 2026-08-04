@@ -1,0 +1,121 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SecureAssess Platform API",
+    "version": "2.1.0",
+    "description": "Authorized non-destructive application security assessment API"
+  },
+  "servers": [{ "url": "http://localhost:3847" }],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "summary": "OpenAPI document",
+        "responses": { "200": { "description": "OpenAPI JSON" } }
+      }
+    },
+    "/api/security-types": {
+      "get": {
+        "summary": "Security testing type catalog",
+        "responses": { "200": { "description": "Types" } }
+      }
+    },
+    "/api/plugins": {
+      "get": {
+        "summary": "Registered plugins",
+        "responses": { "200": { "description": "Plugins" } }
+      }
+    },
+    "/api/scan": {
+      "post": {
+        "summary": "Start assessment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["targetUrl", "authorized"],
+                "properties": {
+                  "targetUrl": { "type": "string", "format": "uri" },
+                  "authorized": { "type": "boolean" },
+                  "projectName": { "type": "string" },
+                  "projectId": { "type": "string" },
+                  "username": { "type": "string" },
+                  "password": { "type": "string" },
+                  "securityTypes": { "type": "array", "items": { "type": "string" } },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["passive", "active-safe", "authenticated"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Job started" },
+          "400": { "description": "Validation / target policy" }
+        }
+      }
+    },
+    "/api/scan/{jobId}": {
+      "get": {
+        "summary": "Get scan job status",
+        "parameters": [
+          { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Job" }, "404": { "description": "Not found" } }
+      },
+      "delete": {
+        "summary": "Cancel scan job",
+        "parameters": [
+          { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Cancel requested" } }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "summary": "List jobs",
+        "responses": { "200": { "description": "Jobs" } }
+      }
+    },
+    "/api/projects": {
+      "get": { "summary": "List projects", "responses": { "200": { "description": "Projects" } } },
+      "post": { "summary": "Create project", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/projects/{id}": {
+      "get": { "summary": "Project detail + trends + baseline", "responses": { "200": { "description": "Detail" } } },
+      "delete": { "summary": "Delete project", "responses": { "200": { "description": "Deleted" } } }
+    },
+    "/api/scans": {
+      "get": { "summary": "List scans", "responses": { "200": { "description": "Scans" } } }
+    },
+    "/api/scans/compare": {
+      "get": {
+        "summary": "Compare two scans or latest project baseline",
+        "parameters": [
+          { "name": "baselineId", "in": "query", "schema": { "type": "string" } },
+          { "name": "currentId", "in": "query", "schema": { "type": "string" } },
+          { "name": "projectId", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Comparison" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    }
+  }
+}

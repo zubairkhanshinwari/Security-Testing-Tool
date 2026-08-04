@@ -1,0 +1,48 @@
+{
+  "name": "secureassess-platform",
+  "version": "2.0.0",
+  "description": "Enterprise authorized web security assessment platform (OWASP/CWE/CVSS) with plugin architecture",
+  "main": "src/platform/api/server.ts",
+  "scripts": {
+    "start": "node dist/src/platform/api/server.js",
+    "start:dev": "tsx src/platform/api/server.ts",
+    "start:legacy": "node src/server.js",
+    "scan": "tsx src/platform/cli.ts",
+    "scan:legacy": "node src/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint \"src/platform/**/*.{ts,js}\" \"modules/**/*.js\" \"tests/**/*.ts\"",
+    "format": "prettier --write \"src/platform/**/*.{ts,js}\" \"modules/**/*.{js,json,md}\" \"docs/**/*.md\" \"tests/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "build:run": "npm run build && npm start",
+    "postinstall": "npx playwright install chromium"
+  },
+  "keywords": [
+    "security",
+    "owasp",
+    "asvs",
+    "cvss",
+    "playwright",
+    "pentest",
+    "secureassess"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright": "^1.51.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
+    "@typescript-eslint/eslint-plugin": "^8.26.1",
+    "@typescript-eslint/parser": "^8.26.1",
+    "eslint": "^8.57.1",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

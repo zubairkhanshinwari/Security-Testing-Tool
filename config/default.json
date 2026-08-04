@@ -1,0 +1,71 @@
+{
+  "app": {
+    "name": "SecureAssess Platform",
+    "version": "2.0.0",
+    "port": 3847
+  },
+  "safety": {
+    "requireAuthorization": true,
+    "defaultMode": "active-safe",
+    "maxConcurrentScans": 1,
+    "maxConcurrentProbes": 6,
+    "requestTimeoutMs": 10000,
+    "rateLimitPerHostPerMinute": 120,
+    "allowDestructive": false,
+    "allowDoS": false,
+    "maxPagesCrawl": 12,
+    "maxParameters": 40,
+    "enforceTargetPolicy": true,
+    "redactSecrets": true
+  },
+  "scan": {
+    "defaultSecurityTypes": "recommended",
+    "workerThreads": false,
+    "browserLaneConcurrency": 1,
+    "httpLaneConcurrency": 4,
+    "discovery": {
+      "maxPagesCrawl": 8,
+      "parseOpenApi": true,
+      "maxOpenApiPaths": 30,
+      "maxSitemapUrls": 15,
+      "collectFormsOnCrawl": true,
+      "authRecrawl": true,
+      "authMaxPagesCrawl": 4,
+      "pageSettleMs": 350,
+      "homeSettleMs": 700,
+      "scriptScanLimit": 6
+    },
+    "incremental": {
+      "enabled": false,
+      "retestConfirmed": true
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffMs": 400
+    }
+  },
+  "reporting": {
+    "formats": ["html", "pdf", "json", "sarif", "csv", "junit"],
+    "includeScreenshots": true,
+    "includeHttpEvidence": true,
+    "evidence": {
+      "onlyVerified": true,
+      "severities": ["Critical", "High", "Medium", "Low"]
+    }
+  },
+  "storage": {
+    "reportsDir": "reports",
+    "dataDir": "data",
+    "projectsDir": "data/projects",
+    "scansDir": "data/scans"
+  },
+  "plugins": {
+    "directory": "modules",
+    "autoRegister": true,
+    "disabled": []
+  },
+  "logging": {
+    "level": "info",
+    "json": false
+  }
+}

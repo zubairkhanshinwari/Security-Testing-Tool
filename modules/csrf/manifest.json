@@ -1,0 +1,14 @@
+{
+  "id": "csrf",
+  "name": "CSRF",
+  "version": "1.0.0",
+  "description": "Safe CSRF signals: cookie SameSite policy and anti-CSRF token presence on state-changing forms.",
+  "category": "Session",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["csrf", "owasp_top10"],
+  "owasp": ["A01:2021-Broken Access Control"],
+  "cwe": ["CWE-352"],
+  "modes": ["passive", "active-safe", "authenticated"],
+  "tags": ["csrf", "session", "owasp"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "cors",
+  "name": "CORS Misconfiguration",
+  "version": "2.0.0",
+  "description": "Checks Access-Control-Allow-Origin and credential reflection risks.",
+  "category": "Config",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["cors", "security_misconfig", "owasp_top10"],
+  "owasp": ["A05:2021-Security Misconfiguration"],
+  "cwe": ["CWE-942"],
+  "modes": ["passive", "active-safe"]
+}

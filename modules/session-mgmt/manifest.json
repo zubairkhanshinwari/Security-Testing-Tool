@@ -1,0 +1,14 @@
+{
+  "id": "session-mgmt",
+  "name": "Session Management",
+  "version": "1.0.0",
+  "description": "Safe session checks: auth endpoint discovery, token presence, and basic logout/cookie hygiene signals.",
+  "category": "Session",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["session_mgmt", "broken_auth", "owasp_top10"],
+  "owasp": ["A07:2021-Identification and Authentication Failures"],
+  "cwe": ["CWE-384", "CWE-613"],
+  "modes": ["passive", "active-safe", "authenticated"],
+  "tags": ["session", "auth", "owasp"]
+}
