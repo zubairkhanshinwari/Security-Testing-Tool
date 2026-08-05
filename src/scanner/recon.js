@@ -3,6 +3,51 @@ const { URL } = require('url');
 const THIRD_PARTY_HOST_RE =
   /(google|gstatic|googleapis|doubleclick|facebook|fbcdn|clarity\.ms|hotjar|segment|sentry|newrelic|cloudflareinsights|hs-scripts|hubspot|twilio|stripe|paypal|analytics)/i;
 
+function isNavContextError(err) {
+  const msg = String(err?.message || err || '');
+  return /Execution context was destroyed|Target closed|frame was detached|most likely because of a navigation/i.test(
+    msg,
+  );
+}
+
+/** Wait until the page finishes navigating / SPA redirects before DOM work. */
+async function waitForStablePage(page, { settleMs = 400 } = {}) {
+  try {
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+  } catch {
+    /* ignore */
+  }
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 5000 });
+  } catch {
+    /* many SPAs never reach networkidle */
+  }
+  if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
+}
+
+/**
+ * page.evaluate that retries when login/SPA navigation destroys the context mid-call.
+ */
+async function safeEvaluate(page, fn, arg, { retries = 3, settleMs = 350 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      await waitForStablePage(page, { settleMs: attempt === 0 ? settleMs : settleMs + 200 });
+      return arg === undefined ? await page.evaluate(fn) : await page.evaluate(fn, arg);
+    } catch (err) {
+      lastErr = err;
+      if (!isNavContextError(err) || attempt === retries - 1) throw err;
+      try {
+        await page.waitForLoadState('load', { timeout: 10000 });
+      } catch {
+        /* ignore */
+      }
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 function sameOrigin(a, b) {
   try {
     return new URL(a).origin === new URL(b).origin;
@@ -90,9 +135,9 @@ async function discoverSurfaces(
   page.on('response', onResponse);
 
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
-  await new Promise((r) => setTimeout(r, homeSettleMs));
+  await waitForStablePage(page, { settleMs: homeSettleMs });
 
-  const pageInfo = await page.evaluate((originLimit) => {
+  const pageInfo = await safeEvaluate(page, (originLimit) => {
     const forms = Array.from(document.querySelectorAll('form')).map((form, idx) => {
       const fields = Array.from(form.querySelectorAll('input, textarea, select'))
         .map((el) => ({
@@ -149,7 +194,8 @@ async function discoverSurfaces(
   }, new URL(targetUrl).origin);
 
   // Extract API hosts + route fragments from JS bundles on the page (bounded + parallel)
-  const bundleIntel = await page.evaluate(
+  const bundleIntel = await safeEvaluate(
+    page,
     async ({ targetOrigin, scriptLimit, byteLimit }) => {
       const scripts = Array.from(document.querySelectorAll('script[src]'))
         .map((s) => s.src)
@@ -219,7 +265,17 @@ async function discoverSurfaces(
       scriptLimit: scriptScanLimit,
       byteLimit: scriptByteLimit,
     },
+    { settleMs: 200 },
   );
+
+  // If SPA redirected away during evaluate, keep current URL as the discovered page
+  try {
+    if (page.url() && page.url() !== pageInfo.url) {
+      pageInfo.url = page.url();
+    }
+  } catch {
+    /* ignore */
+  }
 
   const visited = new Set([pageInfo.url]);
   const queryParams = new Map();
@@ -267,11 +323,11 @@ async function discoverSurfaces(
     visited.add(link);
     try {
       await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 12000 });
-      await new Promise((r) => setTimeout(r, pageSettleMs));
+      await waitForStablePage(page, { settleMs: pageSettleMs });
       recordQuery(page.url());
 
       if (collectFormsOnCrawl) {
-        const pageForms = await page.evaluate(() =>
+        const pageForms = await safeEvaluate(page, () =>
           Array.from(document.querySelectorAll('form')).map((form, idx) => {
             const fields = Array.from(form.querySelectorAll('input, textarea, select'))
               .map((el) => ({
@@ -294,7 +350,7 @@ async function discoverSurfaces(
         crawledForms.push(...pageForms);
       }
 
-      const moreTokens = await page.evaluate(() => {
+      const moreTokens = await safeEvaluate(page, () => {
         const out = {};
         for (const k of Object.keys(localStorage || {})) {
           if (/token|auth|jwt|access|session/i.test(k)) {
@@ -307,7 +363,8 @@ async function discoverSurfaces(
       Object.assign(pageInfo.tokens, moreTokens);
 
       // Harvest more same-origin links (bounded 1-hop expansion)
-      const moreLinks = await page.evaluate(
+      const moreLinks = await safeEvaluate(
+        page,
         (origin) =>
           Array.from(document.querySelectorAll('a[href]'))
             .map((a) => a.href)

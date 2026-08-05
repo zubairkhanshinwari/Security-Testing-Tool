@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { getSeverity } = require('../scanner/severity');
+const { resolveBusinessImpact } = require('../platform/engines/knowledge/businessImpactNarratives');
 
 function resolveScreenshotBase64(f) {
   if (f && f.screenshotBase64) return f.screenshotBase64;
@@ -378,11 +379,13 @@ function buildHtmlReport(data = {}) {
             <tr><td>CVSS Score</td><td>${esc(f.cvss ?? 'N/A')}</td></tr>
           </table>
           <h4>Business Impact</h4>
-          <p>${
+          <p class="business-impact">${esc(
             f.issueFound
-              ? 'Successful injection or information leakage can expose data, enable authentication bypass, or assist further attacks depending on the sink and privileges.'
-              : 'N/A'
-          }</p>
+              ? f.impact ||
+                  f.knowledge?.businessImpact ||
+                  resolveBusinessImpact(f)
+              : 'N/A — no issue confirmed for this check.',
+          )}</p>
           <h4>Description</h4>
           <p>${esc(f.description)}</p>
           <h4>Expected Secure Behavior</h4>

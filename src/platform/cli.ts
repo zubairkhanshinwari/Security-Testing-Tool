@@ -15,11 +15,16 @@ Options:
   --project-id <id>      Existing project id
   --env <name>           Environment
   --tester <name>        Tester name
-  --username <user>      Optional login
-  --password <pass>      Optional password
+  --username <user>      Account A login (optional)
+  --password <pass>      Account A password (optional)
+  --username2 <user>     Account B login (optional, IDOR/BOLA)
+  --password2 <pass>     Account B password (optional)
   --types <ids>          Comma-separated security type ids
   --plugins <ids>        Comma-separated plugin ids
   --mode <mode>          passive | active-safe | authenticated
+  --profile <id>         quick | standard | deep | focused
+  --focus <urls>         Comma-separated focus paths/URLs (high-value routes)
+  --openapi <url>        OpenAPI/Swagger document URL
   --out <dir>            Reports directory override
   --yes                  Authorization confirmation (required)
 `);
@@ -37,9 +42,14 @@ function parseArgs(argv: string[]) {
     else if (a === '--tester') args.tester = next();
     else if (a === '--username') args.username = next();
     else if (a === '--password') args.password = next();
+    else if (a === '--username2') args.username2 = next();
+    else if (a === '--password2') args.password2 = next();
     else if (a === '--types') args.types = next();
     else if (a === '--plugins') args.plugins = next();
     else if (a === '--mode') args.mode = next();
+    else if (a === '--profile') args.profile = next();
+    else if (a === '--focus') args.focus = next();
+    else if (a === '--openapi') args.openapi = next();
     else if (a === '--out') args.out = next();
     else if (a === '--yes') args.yes = true;
     else if (a === '--help' || a === '-h') args.help = true;
@@ -77,9 +87,19 @@ async function main() {
     testerName: args.tester || 'SecureAssess Platform',
     username: args.username || null,
     password: args.password || null,
+    username2: args.username2 || null,
+    password2: args.password2 || null,
     securityTypes: args.types ? args.types.split(',').map((s: string) => s.trim()) : undefined,
     pluginIds: args.plugins ? args.plugins.split(',').map((s: string) => s.trim()) : undefined,
     mode: args.mode || 'active-safe',
+    profile: args.profile || 'standard',
+    focusEndpoints: args.focus
+      ? String(args.focus)
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+      : [],
+    openApiUrl: args.openapi || null,
     authorized: true,
     onProgress: (p) => console.log(`[${p.stage}] ${p.message}`),
   });

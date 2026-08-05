@@ -81,6 +81,8 @@ export interface PlanInput {
   incremental?: boolean;
   baselineDiff?: BaselineDiff;
   retestConfirmed?: boolean;
+  /** Operator-supplied high-value routes (coverage pack) */
+  focusEndpoints?: string[];
 }
 
 /**
@@ -106,6 +108,7 @@ export class ScanPlanningEngine {
       incremental = false,
       baselineDiff,
       retestConfirmed = true,
+      focusEndpoints: requestFocus = [],
     } = input;
 
     const skippedPlugins: Array<{ id: string; reason: string }> = [];
@@ -205,8 +208,9 @@ export class ScanPlanningEngine {
       ? Math.max(1, Math.floor(maxConcurrentProbes / 2))
       : maxConcurrentProbes;
 
-    const focusEndpoints =
+    const baselineFocus =
       incremental && baselineDiff?.available ? baselineDiff.focusEndpoints || [] : [];
+    const focusEndpoints = [...new Set([...(requestFocus || []), ...baselineFocus])];
     const incrementalActive = Boolean(incremental && baselineDiff?.available);
 
     const plan: ScanPlan = {
@@ -225,9 +229,8 @@ export class ScanPlanningEngine {
         `${selected.length} plugin(s), ${surfaceTypes.length} residual type(s), ` +
         `${skippedPlugins.length} skipped` +
         (wafHint ? ', WAF-aware concurrency' : '') +
-        (incrementalActive
-          ? `, incremental focus=${focusEndpoints.length} endpoint(s), retest=${retestIds.size} plugin(s)`
-          : ''),
+        (focusEndpoints.length ? `, focus=${focusEndpoints.length} endpoint(s)` : '') +
+        (incrementalActive ? `, retest=${retestIds.size} plugin(s)` : ''),
     };
 
     this.logger.info('Scan plan created', {

@@ -9,6 +9,7 @@
     "start:legacy": "node src/server.js",
     "scan": "tsx src/platform/cli.ts",
     "scan:legacy": "node src/cli.js",
+    "ci:gate": "node scripts/ci-gate.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint \"src/platform/**/*.{ts,js}\" \"modules/**/*.js\" \"tests/**/*.ts\"",
@@ -27,8 +28,8 @@
     "pentest",
     "secureassess"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Zubair Khan Shinwari",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "express": "^4.21.2",

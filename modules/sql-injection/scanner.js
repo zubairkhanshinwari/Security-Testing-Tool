@@ -16,6 +16,10 @@ const { sortByParamPriority } = require(path.join(
   process.cwd(),
   'src/platform/plugins/paramRank.js',
 ));
+const { gradeFromSignals, evidenceWithSignals } = require(path.join(
+  process.cwd(),
+  'src/platform/plugins/confirmationSignals.js',
+));
 
 function createPlugin(manifest) {
   return {
@@ -126,20 +130,30 @@ function createPlugin(manifest) {
 
         const severity = getSeverity(c) || c.severity || (c.issueFound ? 'Medium' : 'Informational');
         const key = (c.cwe || []).includes('CWE-89') ? 'sqli' : 'info-disclosure';
+        const signals = c.confirmationSignals || [];
+        const confidence = c.issueFound
+          ? gradeFromSignals(signals, { issueFound: true })
+          : 'Informational';
+        const evidence = [
+          ...(c.evidence || []),
+          ...(signals.length
+            ? [evidenceWithSignals('confirmation-signals', signals, { confirmationSignals: signals })]
+            : []),
+        ];
         findings.push({
           id: c.id,
           pluginId: manifest.id,
           title: c.title || 'SQL Injection check',
           description: c.description || '',
           severity,
-          confidence: c.issueFound ? 'Likely' : 'Informational',
+          confidence,
           cvss: cvssFor(key, severity),
           mappings: { ...mappingsFor(key), cwe: c.cwe || mappingsFor(key).cwe },
           affectedUrl: c.fullUrl || c.endpoint,
           affectedEndpoint: c.endpoint,
           parameter: c.parameter,
           method: c.method || 'GET',
-          evidence: c.evidence || [],
+          evidence,
           http: [],
           screenshotPath: null,
           impact: c.issueFound
@@ -152,7 +166,13 @@ function createPlugin(manifest) {
             'https://owasp.org/www-community/attacks/SQL_Injection',
             'https://cwe.mitre.org/data/definitions/89.html',
           ],
-          status: c.status || (c.issueFound ? 'Confirmed' : 'Pass'),
+          status: c.issueFound
+            ? confidence === 'Confirmed'
+              ? 'Confirmed'
+              : confidence === 'Likely'
+                ? 'Likely'
+                : 'Possible'
+            : 'Pass',
           issueFound: Boolean(c.issueFound),
           testMode: 'active-safe',
           module: c.module || 'SQL Injection',

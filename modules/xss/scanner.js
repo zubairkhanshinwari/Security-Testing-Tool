@@ -12,6 +12,10 @@ const { compareToBaseline } = require(path.join(
   process.cwd(),
   'src/platform/plugins/baselineCompare.js',
 ));
+const { gradeFromSignals, evidenceWithSignals } = require(path.join(
+  process.cwd(),
+  'src/platform/plugins/confirmationSignals.js',
+));
 
 const payloadsDoc = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'payloads.json'), 'utf8'),
@@ -76,23 +80,28 @@ function createPlugin(manifest) {
       const ordered = sortByParamPriority(discovery.targets || []).slice(0, 15);
 
       for (const t of ordered) {
-        for (const tmpl of templates.slice(0, 1)) {
+        let best = null;
+        for (const tmpl of templates.slice(0, 2)) {
           const payload = tmpl.replace(/__MARKER__/g, marker);
           try {
             const result = await probeReflect(request, t, payload, marker, ctx.config);
-            candidates.push({
+            const merged = {
               ...result,
               endpoint: t.endpoint,
               parameter: t.parameter,
               location: t.type,
               marker,
               payload,
-            });
-            if (result.reflected) break;
+            };
+            if (!best || (merged.reflected && !best.reflected) || merged.signalScore > best.signalScore) {
+              best = merged;
+            }
+            if (merged.reflected && merged.unencoded) break;
           } catch {
             /* continue */
           }
         }
+        if (best) candidates.push(best);
       }
       return candidates;
     },
@@ -104,18 +113,27 @@ function createPlugin(manifest) {
 
       for (const c of sampled) {
         const issueFound = Boolean(c.reflected && c.baselineOk !== false);
-        const multiSignal = Boolean(c.reflected && c.baselineSignificant);
-        const severity = issueFound ? 'High' : 'Informational';
+        const signals = c.confirmationSignals || [];
+        const confidence = issueFound
+          ? gradeFromSignals(signals, { issueFound: true })
+          : 'Informational';
+        const severity = issueFound
+          ? confidence === 'Confirmed' || confidence === 'Likely'
+            ? 'High'
+            : 'Medium'
+          : 'Informational';
         findings.push({
           pluginId: manifest.id,
           title: issueFound
             ? `Reflected XSS indicator on parameter "${c.parameter}"`
             : 'No obvious reflected XSS on probed parameters',
           description: issueFound
-            ? 'Attacker-controlled markup/marker was reflected without apparent encoding on a user-controlled parameter.'
+            ? c.unencoded
+              ? 'Attacker-controlled marker reflected without HTML encoding, with baseline differential confirmation.'
+              : 'Marker reflection observed; encoding/context evidence may be incomplete.'
             : 'Safe reflected-XSS markers were not returned unencoded on the probed parameters.',
           severity,
-          confidence: issueFound ? (multiSignal ? 'Likely' : 'Possible') : 'Informational',
+          confidence,
           cvss: cvssFor('xss', severity),
           mappings: mappingsFor('xss'),
           affectedUrl: c.fullUrl || c.endpoint,
@@ -123,23 +141,22 @@ function createPlugin(manifest) {
           parameter: c.parameter,
           method: c.method || 'GET',
           evidence: [
-            {
-              technique: 'Reflected XSS Probe (alert-free)',
+            evidenceWithSignals('Reflected XSS Probe (alert-free)', signals, {
               status: c.status,
               parameter: c.parameter,
               payload: c.payload,
               marker: c.marker,
+              unencoded: Boolean(c.unencoded),
               bodySnippet: (c.bodySnippet || '').slice(0, 280),
               baselineDiff: c.baselineDiff || null,
-              significant: Boolean(c.baselineSignificant),
-            },
+              confirmationSignals: signals,
+            }),
             ...(c.baselineDiff
               ? [
-                  {
-                    technique: 'baseline-compare',
-                    signals: c.baselineDiff.signals || [],
+                  evidenceWithSignals('baseline-compare', ['baseline-diff'], {
+                    signals: c.baselineDiff.signals || ['baseline-diff'],
                     significant: c.baselineSignificant,
-                  },
+                  }),
                 ]
               : []),
           ],
@@ -153,13 +170,22 @@ function createPlugin(manifest) {
             'https://owasp.org/www-community/attacks/xss/',
             'https://cwe.mitre.org/data/definitions/79.html',
           ],
-          status: issueFound ? 'Likely' : 'Pass',
+          status: issueFound
+            ? confidence === 'Confirmed'
+              ? 'Confirmed'
+              : confidence === 'Likely'
+                ? 'Likely'
+                : 'Possible'
+            : 'Pass',
           issueFound,
           testMode: 'active-safe',
           module: 'XSS',
-          techniques: multiSignal
-            ? ['Reflected XSS Testing', 'Baseline differential']
-            : ['Reflected XSS Testing'],
+          techniques: [
+            'Reflected XSS Testing',
+            ...(c.baselineSignificant ? ['Baseline differential'] : []),
+            ...(c.unencoded ? ['Unencoded reflection'] : []),
+            ...(c.contextProbe ? ['Context second probe'] : []),
+          ],
         });
       }
       return findings;
@@ -176,13 +202,37 @@ function createPlugin(manifest) {
   };
 }
 
+function analyzeReflection(body, marker, payload) {
+  const markerPresent = body.includes(marker);
+  if (!markerPresent) {
+    return { reflected: false, unencoded: false, encodedAway: false };
+  }
+  const encodedMarker = body.includes(`&lt;`) && /&lt;(svg|img|sa-xss|b)/i.test(body);
+  const rawMarkupNearMarker = (() => {
+    const idx = body.indexOf(marker);
+    const window = body.slice(Math.max(0, idx - 80), idx + marker.length + 80);
+    return /<(svg|img|sa-xss|b)\b/i.test(window) || /on(load|error)\s*=/i.test(window);
+  })();
+  const payloadTagRaw =
+    /<svg|<img|<sa-xss|<b>/i.test(payload) &&
+    /<svg|<img|<sa-xss|<b>/i.test(body) &&
+    !encodedMarker;
+  const unencoded = Boolean(rawMarkupNearMarker || payloadTagRaw);
+  const reflected = Boolean(markerPresent && (unencoded || /<svg|onload=|onerror=|<sa-xss|<img|<b>/i.test(body)));
+  return {
+    reflected,
+    unencoded,
+    encodedAway: encodedMarker && !unencoded,
+  };
+}
+
 async function probeReflect(request, target, payload, marker, config) {
   const timeout = Number(config?.safety?.requestTimeoutMs || 10000);
   const base = target.endpoint;
   let fullUrl = base;
   let method = 'GET';
+  const confirmationSignals = [];
 
-  // Clean baseline (benign value) for differential check
   let baselineBody = '';
   let baselineStatus = 0;
   try {
@@ -230,27 +280,67 @@ async function probeReflect(request, target, payload, marker, config) {
   const body = await res.text();
   const contentType = (res.headers()['content-type'] || '').toLowerCase();
   const looksHtml = /html|xml|svg|text\/plain/.test(contentType) || /<html|<body|<svg/i.test(body);
-  const markerPresent = body.includes(marker);
-  const markupPresent = /<svg|onload=|onerror=|<sa-xss|<img|<b>/i.test(body);
-  const encodedAway =
-    body.includes(`&lt;`) && !body.includes(`<svg`) && body.includes(marker)
-      ? body.indexOf('&lt;') < body.indexOf(marker)
-      : false;
-
-  const reflected = Boolean(looksHtml && markerPresent && markupPresent && !encodedAway);
-  // Baseline must NOT already contain the marker (false positive if page always has similar content)
+  const analysis = analyzeReflection(body, marker, payload);
+  const reflected = Boolean(looksHtml && analysis.reflected);
   const baselineOk = !baselineBody.includes(marker);
   const baselineDiff = compareToBaseline(
     { status: baselineStatus, body: baselineBody },
     { status: res.status(), body },
   );
-  const baselineSignificant = Boolean(reflected && baselineOk && (baselineDiff.bodyChanged || baselineDiff.significant));
+  const baselineSignificant = Boolean(
+    reflected && baselineOk && (baselineDiff.bodyChanged || baselineDiff.significant),
+  );
+
+  if (reflected) confirmationSignals.push('evidence');
+  if (analysis.unencoded && reflected) confirmationSignals.push('reflection-unencoded');
+  if (baselineSignificant) confirmationSignals.push('baseline-diff', 'body-diff');
+  if (baselineDiff.signals?.length) confirmationSignals.push(...baselineDiff.signals);
+
+  // Context second probe: different safe template, same marker
+  let contextProbe = false;
+  if (reflected && analysis.unencoded) {
+    try {
+      const altPayload = `"><b data-sa="${marker}">`;
+      let altRes;
+      if (target.type === 'form') {
+        const altBody = new URLSearchParams({ [target.parameter]: altPayload }).toString();
+        altRes = await request.fetch(base, {
+          method: 'POST',
+          failOnStatusCode: false,
+          timeout,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          data: altBody,
+        });
+      } else {
+        const u = new URL(base.includes('://') ? base : `https://${base}`);
+        u.searchParams.set(target.parameter, altPayload);
+        altRes = await request.fetch(u.toString(), { failOnStatusCode: false, timeout });
+      }
+      const altText = await altRes.text();
+      if (altText.includes(marker) && /<b\s+data-sa=/i.test(altText)) {
+        contextProbe = true;
+        confirmationSignals.push('context-probe', 'reproducible');
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const signalScore =
+    (reflected ? 1 : 0) +
+    (analysis.unencoded ? 2 : 0) +
+    (baselineSignificant ? 2 : 0) +
+    (contextProbe ? 2 : 0);
 
   return {
     reflected,
+    unencoded: analysis.unencoded,
     baselineOk,
     baselineSignificant,
     baselineDiff,
+    contextProbe,
+    confirmationSignals: [...new Set(confirmationSignals)],
+    signalScore,
     status: res.status(),
     fullUrl,
     method,

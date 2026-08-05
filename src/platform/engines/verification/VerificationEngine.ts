@@ -1,10 +1,11 @@
 import type { Confidence, Finding, Severity } from '../../core/types/finding';
 import type { Logger } from '../../core/logging/logger';
+import { extractStructuredSignals, hasProof, uniqueSignals } from './confirmationSignals';
 
 /**
  * Verification Engine — normalize → family-dedupe → multi-signal confidence.
- * Precision pack: Confirmed requires ≥2 independent signals for High/Critical;
- * family merge keeps richest evidence; weak singles are tempered.
+ * Confirmation-depth: Confirmed requires a PROOF signal (boolean-diff, cross-user,
+ * reflection-unencoded, error-marker, etc.) plus supporting evidence.
  */
 export class VerificationEngine {
   constructor(private readonly logger: Logger) {}
@@ -12,6 +13,42 @@ export class VerificationEngine {
   /** Full post-probe pipeline: assign ids → dedupe issues → confidence / FP tempering. */
   process(findings: Finding[]): Finding[] {
     return this.verifyFindings(this.dedupe(this.normalizeIds(findings)));
+  }
+
+  /**
+   * End-of-scan gate: Confirmed without proof signals is demoted (no live re-exploit).
+   * Marks verification.retested = true when proof is present.
+   */
+  retestConfirmed(findings: Finding[]): Finding[] {
+    return findings.map((raw) => {
+      const f = { ...raw };
+      if (!f.issueFound) return f;
+      const signals = uniqueSignals([
+        ...(f.verification?.signals || []),
+        ...extractStructuredSignals(f.evidence),
+      ]);
+      const proof = hasProof(signals);
+      if (f.status === 'Confirmed' || f.confidence === 'Confirmed') {
+        if (!proof) {
+          f.confidence = 'High Confidence';
+          f.status = 'Likely';
+          f.description = `${f.description}\n\n[Confirmation] Demoted — Confirmed requires a proof signal (boolean-diff / cross-user / unencoded reflection / error-marker).`;
+          f.verification = {
+            signalCount: signals.length,
+            signals: [...signals, 'confirmed-retest-demote'],
+            retestRecommended: true,
+          };
+        } else {
+          f.verification = {
+            signalCount: signals.length,
+            signals,
+            retestRecommended: false,
+            retested: true,
+          } as Finding['verification'];
+        }
+      }
+      return f;
+    });
   }
 
   normalizeIds(findings: Finding[]): Finding[] {
@@ -70,6 +107,12 @@ export class VerificationEngine {
         f.description = `${f.description}\n\n[Precision] Severity tempered — fewer than two independent evidence signals (baseline/differential/http).`;
       }
 
+      // Confirmation-depth: never keep Confirmed without a proof signal
+      if (confidence === 'Confirmed' && !hasProof(signals.labels)) {
+        confidence = 'High Confidence';
+        f.description = `${f.description}\n\n[Confirmation] Needs a proof signal for Confirmed (boolean-diff / cross-user / reflection-unencoded / error-marker).`;
+      }
+
       f.confidence = confidence;
       f.verification = {
         signalCount: signals.count,
@@ -102,6 +145,9 @@ export class VerificationEngine {
         (raw.severity === 'Critical' || raw.severity === 'High') &&
         !signals.labels.includes('differential') &&
         !signals.labels.includes('baseline-diff') &&
+        !signals.labels.includes('boolean-diff') &&
+        !signals.labels.includes('error-marker') &&
+        !signals.labels.includes('reflection-unencoded') &&
         !signals.httpPair &&
         signals.count < 3
       ) {
@@ -143,67 +189,55 @@ export class VerificationEngine {
   private collectSignals(f: Finding) {
     const labels: string[] = [];
     let count = 0;
+    const push = (label: string) => {
+      if (!labels.includes(label)) {
+        labels.push(label);
+        count += 1;
+      }
+    };
+
     const evidenceCount = f.evidence?.length || 0;
     const httpCount = f.http?.length || 0;
-    if (evidenceCount >= 1) {
-      count += 1;
-      labels.push('evidence');
-    }
-    if (evidenceCount >= 2) {
-      count += 1;
-      labels.push('multi-evidence');
-    }
-    if (httpCount >= 1) {
-      count += 1;
-      labels.push('http');
-    }
-    if (httpCount >= 2) {
-      count += 1;
-      labels.push('cross-request');
-    }
+    if (evidenceCount >= 1) push('evidence');
+    if (evidenceCount >= 2) push('multi-evidence');
+    if (httpCount >= 1) push('http');
+    if (httpCount >= 2) push('cross-request');
+
+    const structured = extractStructuredSignals(f.evidence);
+    for (const s of structured) push(s);
+
     const blob = `${f.title} ${f.description} ${JSON.stringify(f.evidence || []).slice(0, 1200)}`;
     if (/differential|boolean|time-based|reproduced|confirmed|baseline/i.test(blob)) {
-      count += 1;
-      labels.push('differential');
+      push('differential');
     }
     if (/baseline-diff|significant.*baseline|compareToBaseline/i.test(blob)) {
-      count += 1;
-      labels.push('baseline-diff');
+      push('baseline-diff');
     }
     if (/sql error|mongodb|cast to objectid|syntax error|51091|root:.*:0:0:/i.test(blob)) {
-      count += 1;
-      labels.push('technology-error');
+      push('technology-error');
     }
-    if ((f.techniques || []).length >= 2) {
-      count += 1;
-      labels.push('multi-technique');
-    }
-    // Structured evidence flags from plugins
+    if ((f.techniques || []).length >= 2) push('multi-technique');
+
     for (const ev of f.evidence || []) {
       if (ev && typeof ev === 'object') {
         const o = ev as Record<string, unknown>;
         if (o.baselineDiff || o.significant === true || o.technique === 'baseline-compare') {
-          if (!labels.includes('baseline-diff')) {
-            count += 1;
-            labels.push('baseline-diff');
-          }
-        }
-        if (Array.isArray(o.signals) && (o.signals as string[]).length) {
-          if (!labels.includes('differential')) {
-            count += 1;
-            labels.push('differential');
-          }
+          push('baseline-diff');
         }
       }
     }
-    return { count, labels, httpPair: httpCount >= 2 };
+    return { count, labels: uniqueSignals(labels), httpPair: httpCount >= 2 };
   }
 
   calculateConfidence(f: Finding, signals = this.collectSignals(f)): Confidence {
-    if (signals.count >= 4 || (signals.httpPair && signals.labels.includes('technology-error'))) {
+    const proof = hasProof(signals.labels);
+    // Confirmed: proof + enough support (or dual proof)
+    if (proof && (signals.count >= 3 || signals.labels.filter((l) => hasProof([l])).length >= 2)) {
       return 'Confirmed';
     }
-    if (signals.count >= 3) return 'High Confidence';
+    if (proof || signals.count >= 3 || (signals.httpPair && signals.labels.includes('technology-error'))) {
+      return 'High Confidence';
+    }
     if (signals.count >= 2) return 'Medium Confidence';
     if (signals.count >= 1) return 'Low Confidence';
     return 'Informational';

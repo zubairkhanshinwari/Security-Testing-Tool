@@ -1,5 +1,15 @@
+import path from 'path';
 import type { Finding } from '../../core/types/finding';
 import { mappingsFor, cvssFor, STANDARD_LIBRARY } from '../../core/standards/mappings';
+
+// Plain JS module (also used by src/report/htmlReport.js) — resolve from repo root so dist/ works.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { resolveBusinessImpact } = require(path.join(
+  process.cwd(),
+  'src/platform/engines/knowledge/businessImpactNarratives.js',
+)) as {
+  resolveBusinessImpact: (f: Record<string, unknown>) => string;
+};
 
 export type KnowledgeKey =
   | 'sqli'
@@ -17,7 +27,6 @@ const KNOWLEDGE: Record<
   KnowledgeKey,
   {
     technical: string;
-    businessImpact: string;
     prerequisites: string[];
     remediation: string;
     secureCoding: string[];
@@ -28,7 +37,6 @@ const KNOWLEDGE: Record<
   sqli: {
     technical:
       'Untrusted input is interpreted as SQL, allowing query logic manipulation.',
-    businessImpact: 'Data breach, authentication bypass, fraud, regulatory exposure.',
     prerequisites: ['Injectable parameter reaches SQL query', 'Insufficient parameterization'],
     remediation: 'Use parameterized queries/ORM bind variables; least-privilege DB accounts.',
     secureCoding: [
@@ -47,7 +55,6 @@ const KNOWLEDGE: Record<
   },
   nosqli: {
     technical: 'NoSQL operators or regex are attacker-controlled in query objects.',
-    businessImpact: 'Unauthorized data access, mass enumeration, auth bypass.',
     prerequisites: ['User input merged into Mongo/NoSQL query operators'],
     remediation: 'Allow-list fields; cast types; ban raw operator objects from clients.',
     secureCoding: [
@@ -65,7 +72,6 @@ const KNOWLEDGE: Record<
   },
   xss: {
     technical: 'Untrusted data rendered into HTML/JS without context-aware encoding.',
-    businessImpact: 'Session theft, account takeover, malware distribution.',
     prerequisites: ['Reflection or storage of attacker HTML/JS', 'Missing CSP'],
     remediation: 'Context-aware encoding; strict CSP; sanitize only when necessary.',
     secureCoding: ['Use framework auto-escaping; avoid innerHTML with untrusted data'],
@@ -74,7 +80,6 @@ const KNOWLEDGE: Record<
   },
   headers: {
     technical: 'Missing browser security headers reduce defense-in-depth.',
-    businessImpact: 'Easier clickjacking/XSS impact and transport downgrade risk.',
     prerequisites: ['Responses omit CSP/HSTS/XFO/etc.'],
     remediation: 'Set CSP, HSTS, X-Content-Type-Options, frame protections, Referrer-Policy.',
     secureCoding: ["res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')"],
@@ -83,7 +88,6 @@ const KNOWLEDGE: Record<
   },
   cors: {
     technical: 'Over-permissive CORS allows untrusted origins to read responses.',
-    businessImpact: 'Cross-site data theft for authenticated APIs.',
     prerequisites: ['ACAO reflects arbitrary Origin or * with credentials'],
     remediation: 'Explicit origin allow-list; never combine * with credentials.',
     secureCoding: ['Validate Origin against allow-list before setting ACAO'],
@@ -92,7 +96,6 @@ const KNOWLEDGE: Record<
   },
   'info-disclosure': {
     technical: 'Sensitive files or verbose errors expose internals.',
-    businessImpact: 'Accelerates further attacks; may leak credentials.',
     prerequisites: ['Misconfigured static hosting or verbose error middleware'],
     remediation: 'Block .env/.git/source maps in prod; generic error responses.',
     secureCoding: ['Never send stack traces to clients in production'],
@@ -101,7 +104,6 @@ const KNOWLEDGE: Record<
   },
   idor: {
     technical: 'Object references lack authorization checks.',
-    businessImpact: 'Horizontal/vertical privilege escalation and data exposure.',
     prerequisites: ['Predictable IDs', 'Missing object-level authz'],
     remediation: 'Authorize every object access server-side (BOLA controls).',
     secureCoding: ['if (resource.ownerId !== req.user.id) return 403'],
@@ -110,7 +112,6 @@ const KNOWLEDGE: Record<
   },
   csrf: {
     technical: 'State-changing requests trust cookies without anti-CSRF controls.',
-    businessImpact: 'Unauthorized actions as the victim user.',
     prerequisites: ['Cookie session auth', 'Missing SameSite/CSRF token'],
     remediation: 'Anti-CSRF tokens + SameSite=Lax/Strict + prefer Authorization headers.',
     secureCoding: ['Validate CSRF token on POST/PUT/DELETE'],
@@ -119,7 +120,6 @@ const KNOWLEDGE: Record<
   },
   jwt: {
     technical: 'Weak JWT validation/algorithm/secret handling.',
-    businessImpact: 'Impersonation and privilege escalation.',
     prerequisites: ['Accepts alg=none or weak secrets', 'No exp/aud checks'],
     remediation: 'Enforce algorithm allow-list, short TTL, audience/issuer checks.',
     secureCoding: ['jwt.verify(token, key, { algorithms: ["RS256"], audience, issuer })'],
@@ -128,7 +128,6 @@ const KNOWLEDGE: Record<
   },
   generic: {
     technical: 'Security control weakness identified during authorized testing.',
-    businessImpact: 'Depends on exploitability and data sensitivity.',
     prerequisites: ['Application exposes affected control'],
     remediation: 'Follow OWASP ASVS guidance for the mapped control family.',
     secureCoding: ['Prefer secure defaults and deny-by-default authorization'],
@@ -173,16 +172,18 @@ export class KnowledgeEngine {
         nist80053: f.mappings?.nist80053 || mapped.nist80053 || [],
       };
 
+      const businessImpact = resolveBusinessImpact(f as unknown as Record<string, unknown>);
+
       return {
         ...f,
         mappings,
         cvss: f.cvss || cvssFor(key === 'generic' ? 'headers' : key, f.severity) || std?.defaultCvss || null,
-        impact: f.issueFound ? kn.businessImpact : f.impact,
+        impact: f.issueFound ? businessImpact : f.impact,
         remediation: f.issueFound ? kn.remediation : f.remediation,
         references: [...new Set([...(f.references || []), ...kn.references])],
         knowledge: {
           technicalExplanation: kn.technical,
-          businessImpact: kn.businessImpact,
+          businessImpact,
           attackPrerequisites: kn.prerequisites,
           secureCodingExamples: kn.secureCoding,
           verificationSteps: kn.verificationSteps,

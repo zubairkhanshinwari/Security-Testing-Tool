@@ -20,7 +20,11 @@ import { KnowledgeRepository, createScanId } from '../../core/knowledge';
 import { KnowledgeEngine } from '../knowledge/KnowledgeEngine';
 import { FingerprintEngine } from '../fingerprint/FingerprintEngine';
 import type { BaselineDiff } from '../../dashboard/baseline';
-import { applyProfileToConfig } from '../../core/config/scanProfiles';
+import {
+  applyProfileToConfig,
+  normalizeFocusEndpoints,
+  profileEtaLabel,
+} from '../../core/config/scanProfiles';
 
 const nodeRequire = createRequire(__filename);
 
@@ -70,7 +74,18 @@ export class ScanOrchestrator {
     };
 
     const { config: scanConfig, profile } = applyProfileToConfig(this.config, request.profile);
-    this.logger.info('Scan profile applied', { profile: profile.id, label: profile.label });
+    const userFocus = normalizeFocusEndpoints(request.targetUrl, request.focusEndpoints);
+    const openApiUrl =
+      request.openApiUrl && /^https?:\/\//i.test(String(request.openApiUrl))
+        ? String(request.openApiUrl)
+        : null;
+    this.logger.info('Scan profile applied', {
+      profile: profile.id,
+      label: profile.label,
+      eta: profileEtaLabel(profile),
+      focusEndpoints: userFocus.length,
+      openApiUrl: Boolean(openApiUrl),
+    });
 
     const { requestedTypes, selectedTypes, catalogSize } = this.resolveTypes(request.securityTypes);
     const repo = new KnowledgeRepository(
@@ -110,11 +125,20 @@ export class ScanOrchestrator {
       throwIfCancelled();
       t0 = Date.now();
       repo.beginStage('recon', 'Discovery');
-      progress({ stage: 'recon', message: 'Running discovery…', percent: 15 });
+      progress({
+        stage: 'recon',
+        message: `Running ${profile.label} discovery (${profileEtaLabel(profile)})…`,
+        percent: 15,
+      });
       const discoveryCfg = scanConfig.scan?.discovery || {};
       const maxLinks = Number(
         discoveryCfg.maxPagesCrawl ?? scanConfig.safety?.maxPagesCrawl ?? 8,
       );
+      // Focused profile: seed crawl heavily from operator routes; others merge as extras
+      const seedLinks =
+        profile.id === 'focused' && userFocus.length
+          ? userFocus
+          : userFocus;
       await this.discovery.discover(request.targetUrl, {
         maxLinks,
         parseOpenApi: discoveryCfg.parseOpenApi !== false,
@@ -124,6 +148,8 @@ export class ScanOrchestrator {
         pageSettleMs: Number(discoveryCfg.pageSettleMs || 350),
         homeSettleMs: Number(discoveryCfg.homeSettleMs || 700),
         scriptScanLimit: Number(discoveryCfg.scriptScanLimit || 6),
+        extraSeedLinks: seedLinks,
+        openApiUrls: openApiUrl ? [openApiUrl] : undefined,
         repo,
       });
       mark('recon', t0);
@@ -147,18 +173,31 @@ export class ScanOrchestrator {
       const session = await this.sessionEngine.establish(request, repo);
       mark('auth', t0);
 
-      // Phase A: authenticated second-pass discovery (merge new pages/APIs/forms)
-      if (session?.ok && discoveryCfg.authRecrawl !== false) {
+      // Phase A: authenticated second-pass discovery — only when session is ready
+      if (session?.ok && session.ready !== false && discoveryCfg.authRecrawl !== false) {
         throwIfCancelled();
         t0 = Date.now();
         repo.beginStage('auth-recon', 'Authenticated discovery');
         progress({
           stage: 'auth-recon',
-          message: 'Re-discovering surfaces after authentication…',
+          message: `Re-discovering after ${session.adapter || 'auth'} session…`,
           percent: 30,
         });
         const authMax = Number(discoveryCfg.authMaxPagesCrawl || Math.min(maxLinks, 8));
-        await this.discovery.discover(request.targetUrl, {
+        // Prefer adapter post-login URL, then current page, then original target
+        let authCrawlUrl = session.postLoginUrl || request.targetUrl;
+        try {
+          const { page } = this.browserEngine.getSession();
+          const current = page.url();
+          if (current && /^https?:\/\//i.test(current) && !/\/login/i.test(current)) {
+            authCrawlUrl = current;
+          } else if (session.postLoginUrl && !/\/login/i.test(session.postLoginUrl)) {
+            authCrawlUrl = session.postLoginUrl;
+          }
+        } catch {
+          /* keep postLoginUrl / targetUrl */
+        }
+        await this.discovery.discover(authCrawlUrl, {
           maxLinks: authMax,
           parseOpenApi: false,
           collectFormsOnCrawl: discoveryCfg.collectFormsOnCrawl !== false,
@@ -201,6 +240,15 @@ export class ScanOrchestrator {
           : `Building ${profile.label} scan plan…`,
         percent: 38,
       });
+      // Also fold OpenAPI-derived endpoints into focus when Focused profile
+      const openApiFocus = (repo.getDiscovery()?.openapiEndpoints || [])
+        .map((e: any) => e.url || e.path)
+        .filter(Boolean)
+        .slice(0, 40);
+      const planFocus = normalizeFocusEndpoints(request.targetUrl, [
+        ...userFocus,
+        ...(profile.id === 'focused' ? openApiFocus : []),
+      ]);
       const plan = this.planner.plan({
         requestedTypes,
         selectedTypes,
@@ -217,6 +265,7 @@ export class ScanOrchestrator {
         incremental,
         baselineDiff,
         retestConfirmed: scanConfig.scan?.incremental?.retestConfirmed !== false,
+        focusEndpoints: planFocus,
       });
       mark('plan', t0);
       this.logger.info('Executing scan plan', {
@@ -225,11 +274,12 @@ export class ScanOrchestrator {
         httpConcurrencyHint: plan.httpConcurrencyHint,
         incremental: plan.incremental,
         profile: profile.id,
+        focusEndpoints: plan.focusEndpoints?.length || 0,
       });
 
       const pluginsToRun = plan.plugins;
       const pluginCtx: PluginContext = {
-        request,
+        request: { ...request, focusEndpoints: planFocus },
         attackSurface: repo.getAttackSurface(),
         auth: repo.getSession(),
         page,
@@ -279,8 +329,14 @@ export class ScanOrchestrator {
       throwIfCancelled();
       t0 = Date.now();
       repo.beginStage('verify');
-      progress({ stage: 'verify', message: 'Multi-signal verification & FP reduction…', percent: 88 });
+      progress({ stage: 'verify', message: 'Multi-signal verification & confirmation gates…', percent: 86 });
       let findings = this.verification.process(repo.getFindings());
+      progress({
+        stage: 'verify',
+        message: 'Confirmation retest gate (proof signals)…',
+        percent: 89,
+      });
+      findings = this.verification.retestConfirmed(findings);
       findings = this.knowledge.enrich(findings);
       repo.replaceFindings(findings);
       for (const f of findings.filter((x) => x.issueFound)) {

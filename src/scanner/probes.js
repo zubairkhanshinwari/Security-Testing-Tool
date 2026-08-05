@@ -1,4 +1,5 @@
 const { URL } = require('url');
+const path = require('path');
 const {
   ERROR_STRING,
   BOOLEAN_TRUE,
@@ -9,6 +10,14 @@ const {
   NOSQL_ERROR_MARKERS,
 } = require('./payloads');
 const { SEVERITY_KEY } = require('./severity');
+const { compareToBaseline } = require(path.join(
+  process.cwd(),
+  'src/platform/plugins/baselineCompare.js',
+));
+const { gradeFromSignals, uniqueSignals } = require(path.join(
+  process.cwd(),
+  'src/platform/plugins/confirmationSignals.js',
+));
 
 function hasAny(text, regexes) {
   return regexes.some((re) => re.test(text || ''));
@@ -85,6 +94,7 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
 
   const baseline = await timedFetch(page, build('1'), { headers, method: 'GET' });
   const evidence = [];
+  const confirmationSignals = [];
   let issue = false;
   let severity = null;
   let techniques = [];
@@ -94,20 +104,32 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
   let owasp = 'A03:2021 – Injection; WSTG-INPV-05';
   let cvss = null;
 
-  // Error-based
+  // Error-based (must differ from clean baseline)
   for (const payload of ERROR_STRING.slice(0, 3)) {
     const r = await timedFetch(page, build(payload), { headers, method: 'GET' });
     const c = classifyResponse(r.body, baseline, r);
-    evidence.push({ technique: 'Error Handling Review', payload, ...r, ...c });
-    if (c.sqlError) {
+    const diff = compareToBaseline(
+      { status: baseline.status, body: baseline.body, ms: baseline.ms },
+      { status: r.status, body: r.body, ms: r.ms },
+    );
+    evidence.push({
+      technique: 'Error Handling Review',
+      payload,
+      ...r,
+      ...c,
+      signals: diff.suspiciousError ? ['error-marker', 'baseline-diff'] : diff.signals,
+      baselineDiff: diff,
+    });
+    if (c.sqlError && diff.suspiciousError) {
       issue = true;
       severity = 'High';
       title = `Error-based SQL Injection indicator in parameter "${param}"`;
       description =
-        'Server responses include SQL engine error patterns when special characters are supplied, indicating unsanitized input may reach a SQL query.';
-      techniques = ['Error Handling Review'];
+        'SQL engine error patterns appear on probe responses but not on the clean baseline, indicating unsanitized input may reach a SQL query.';
+      techniques = ['Error Handling Review', 'Baseline differential'];
       cwe = ['CWE-89'];
       cvss = 8.6;
+      confirmationSignals.push('error-marker', 'baseline-diff', 'technology-error');
       break;
     }
     if (c.nosqlError && /\$regex|invalid regular expression|location51091/i.test(r.body)) {
@@ -120,44 +142,95 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
       cwe = ['CWE-943'];
       owasp = 'A03:2021 – Injection; WSTG-INPV-06';
       cvss = 7.5;
+      confirmationSignals.push('technology-error', 'baseline-diff');
       break;
     }
   }
 
-  // Boolean differential (only if no confirmed error-based yet for SQLi)
+  // Boolean differential — require reproducible gap across 2 rounds
   if (!issue) {
-    const t = await timedFetch(page, build(BOOLEAN_TRUE[0]), { headers, method: 'GET' });
-    const f = await timedFetch(page, build(BOOLEAN_FALSE[0]), { headers, method: 'GET' });
-    evidence.push({ technique: 'Boolean Logic Validation', payload: BOOLEAN_TRUE[0], ...t });
-    evidence.push({ technique: 'Boolean Logic Validation', payload: BOOLEAN_FALSE[0], ...f });
-    const lenGap = Math.abs((t.len || 0) - (f.len || 0));
-    const statusGap = t.status !== f.status;
-    if ((statusGap || lenGap >= 80) && t.status < 500 && f.status < 500) {
+    let booleanHits = 0;
+    for (let round = 0; round < 2; round++) {
+      const t = await timedFetch(page, build(BOOLEAN_TRUE[0]), { headers, method: 'GET' });
+      const f = await timedFetch(page, build(BOOLEAN_FALSE[0]), { headers, method: 'GET' });
+      const lenGap = Math.abs((t.len || 0) - (f.len || 0));
+      const statusGap = t.status !== f.status;
+      const roundOk = (statusGap || lenGap >= 80) && t.status < 500 && f.status < 500;
+      evidence.push({
+        technique: 'Boolean Logic Validation',
+        payload: BOOLEAN_TRUE[0],
+        round: round + 1,
+        ...t,
+        signals: roundOk ? ['boolean-diff'] : [],
+      });
+      evidence.push({
+        technique: 'Boolean Logic Validation',
+        payload: BOOLEAN_FALSE[0],
+        round: round + 1,
+        ...f,
+        signals: roundOk ? ['boolean-diff'] : [],
+      });
+      if (roundOk) booleanHits += 1;
+    }
+    if (booleanHits >= 2) {
       issue = true;
-      severity = 'Medium';
+      severity = 'High';
       title = `Boolean-based SQL Injection indicator in parameter "${param}"`;
       description =
-        'True/false boolean payloads produced a meaningful response differential (status or length), which can indicate blind SQL injection.';
-      techniques = ['Boolean Logic Validation'];
+        'True/false boolean payloads produced a reproducible response differential (status or length) across two rounds versus each other.';
+      techniques = ['Boolean Logic Validation', 'Reproducible differential'];
       cwe = ['CWE-89'];
       cvss = 7.5;
+      confirmationSignals.push('boolean-diff', 'reproducible', 'differential');
+    } else if (booleanHits === 1) {
+      issue = true;
+      severity = 'Medium';
+      title = `Possible boolean-based SQL Injection indicator in parameter "${param}"`;
+      description =
+        'True/false boolean payloads produced a one-shot response differential; not yet reproducible.';
+      techniques = ['Boolean Logic Validation'];
+      cwe = ['CWE-89'];
+      cvss = 6.5;
+      confirmationSignals.push('boolean-diff');
     }
   }
 
-  // Time-based (single safe sleep payload)
+  // Time-based — require ≥2 delayed responses vs baseline (safe short sleep)
   if (!issue) {
-    const r = await timedFetch(page, build(TIME_BASED[0]), { headers, method: 'GET' });
-    const c = classifyResponse(r.body, baseline, r);
-    evidence.push({ technique: 'Time-Based Validation', payload: TIME_BASED[0], ...r, ...c });
-    if (c.suspiciousTime) {
+    let timeHits = 0;
+    for (let i = 0; i < 2; i++) {
+      const r = await timedFetch(page, build(TIME_BASED[0]), { headers, method: 'GET' });
+      const c = classifyResponse(r.body, baseline, r);
+      evidence.push({
+        technique: 'Time-Based Validation',
+        payload: TIME_BASED[0],
+        attempt: i + 1,
+        ...r,
+        ...c,
+        signals: c.suspiciousTime ? ['timing-diff'] : [],
+      });
+      if (c.suspiciousTime) timeHits += 1;
+    }
+    if (timeHits >= 2) {
       issue = true;
       severity = 'High';
       title = `Time-based SQL Injection indicator in parameter "${param}"`;
       description =
-        'A time-delay payload increased response latency by ≥2.5s versus baseline, which can indicate time-based blind SQL injection.';
-      techniques = ['Time-Based Validation'];
+        'A time-delay payload increased response latency by ≥2.5s versus baseline on multiple attempts (non-destructive check).';
+      techniques = ['Time-Based Validation', 'Reproducible differential'];
       cwe = ['CWE-89'];
       cvss = 8.1;
+      confirmationSignals.push('timing-diff', 'reproducible');
+    } else if (timeHits === 1) {
+      issue = true;
+      severity = 'Medium';
+      title = `Possible time-based SQL Injection indicator in parameter "${param}"`;
+      description =
+        'A single time-delay observation (≥2.5s vs baseline); not yet reproducible.';
+      techniques = ['Time-Based Validation'];
+      cwe = ['CWE-89'];
+      cvss = 6.5;
+      confirmationSignals.push('timing-diff');
     }
   }
 
@@ -200,6 +273,8 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
     }
   }
 
+  const signals = uniqueSignals(confirmationSignals);
+  const graded = gradeFromSignals(signals, { issueFound: issue });
   return {
     endpoint: baseUrl,
     method: 'GET',
@@ -208,7 +283,8 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
     authRequired: Boolean(authHeader),
     issueFound: issue,
     severity: severity || 'Informational',
-    confidence: issue ? 'Medium' : 'High',
+    confidence: graded,
+    confirmationSignals: signals,
     techniques: techniques.length ? techniques : ['Input Validation Review', 'Parameter Handling Review'],
     title: title || `No SQL Injection confirmed for parameter "${param}"`,
     description:
@@ -218,8 +294,8 @@ async function probeGetParam(page, baseUrl, param, authHeader) {
     owasp,
     cvss,
     baseline,
-    evidence: evidence.slice(0, 8),
-    status: issue ? 'Confirmed' : 'Pass',
+    evidence: evidence.slice(0, 10),
+    status: issue ? (graded === 'Confirmed' ? 'Confirmed' : graded === 'Likely' ? 'Likely' : 'Possible') : 'Pass',
   };
 }
 

@@ -157,6 +157,8 @@ async function main() {
       testerName = 'SecureAssess Platform',
       username = '',
       password = '',
+      username2 = '',
+      password2 = '',
       authHeader = '',
       apiKey = '',
       securityTypes,
@@ -164,6 +166,9 @@ async function main() {
       mode = 'active-safe',
       incremental = false,
       profile = 'standard',
+      focusEndpoints,
+      focusUrls,
+      openApiUrl = '',
       authorized = false,
     } = req.body || {};
 
@@ -205,6 +210,12 @@ async function main() {
       mode,
       incremental: Boolean(incremental),
       profile: profile || 'standard',
+      focusCount: Array.isArray(focusEndpoints || focusUrls)
+        ? (focusEndpoints || focusUrls).length
+        : focusEndpoints || focusUrls
+          ? 1
+          : 0,
+      openApiUrl: openApiUrl || null,
     });
 
     (async () => {
@@ -218,6 +229,8 @@ async function main() {
             testerName,
             username: username || null,
             password: password || null,
+            username2: username2 || null,
+            password2: password2 || null,
             authHeader: authHeader || null,
             apiKey: apiKey || null,
             securityTypes,
@@ -225,6 +238,8 @@ async function main() {
             mode,
             incremental: Boolean(incremental),
             profile: profile || 'standard',
+            focusEndpoints: focusEndpoints || focusUrls || [],
+            openApiUrl: openApiUrl || null,
             authorized: true,
             signal,
             onProgress: (p) => {

@@ -1,9 +1,11 @@
-export type ScanProfileId = 'quick' | 'standard' | 'deep';
+export type ScanProfileId = 'quick' | 'standard' | 'deep' | 'focused';
 
 export interface ScanProfileOverrides {
   id: ScanProfileId;
   label: string;
   description: string;
+  /** Soft ETA for UI / operators (minutes) */
+  etaMinutes: { min: number; max: number };
   discovery: {
     maxPagesCrawl: number;
     maxOpenApiPaths: number;
@@ -13,6 +15,8 @@ export interface ScanProfileOverrides {
     scriptScanLimit: number;
     pageSettleMs: number;
     homeSettleMs: number;
+    /** Prefer user/OpenAPI seeds over broad crawl */
+    prioritizeFocusSeeds?: boolean;
   };
   safety: {
     requestTimeoutMs: number;
@@ -24,7 +28,8 @@ export const SCAN_PROFILES: Record<ScanProfileId, ScanProfileOverrides> = {
   quick: {
     id: 'quick',
     label: 'Quick',
-    description: 'Faster pass — fewer pages/probes, good for smoke checks (~2–4 min).',
+    description: 'Smoke check — shallow crawl, fewer probes. Best for CI / plumbing validation.',
+    etaMinutes: { min: 2, max: 4 },
     discovery: {
       maxPagesCrawl: 4,
       maxOpenApiPaths: 12,
@@ -40,7 +45,8 @@ export const SCAN_PROFILES: Record<ScanProfileId, ScanProfileOverrides> = {
   standard: {
     id: 'standard',
     label: 'Standard',
-    description: 'Balanced precision vs speed (default).',
+    description: 'Balanced coverage vs speed — default for most assessments.',
+    etaMinutes: { min: 4, max: 10 },
     discovery: {
       maxPagesCrawl: 8,
       maxOpenApiPaths: 30,
@@ -56,7 +62,9 @@ export const SCAN_PROFILES: Record<ScanProfileId, ScanProfileOverrides> = {
   deep: {
     id: 'deep',
     label: 'Deep',
-    description: 'Broader crawl and probes — slower, more coverage.',
+    description:
+      'Broader crawl/OpenAPI/probes. Slower — expect 15–30+ minutes on large apps. May still miss obscure routes; add Focus routes for critical areas.',
+    etaMinutes: { min: 15, max: 35 },
     discovery: {
       maxPagesCrawl: 16,
       maxOpenApiPaths: 60,
@@ -69,11 +77,35 @@ export const SCAN_PROFILES: Record<ScanProfileId, ScanProfileOverrides> = {
     },
     safety: { requestTimeoutMs: 15000, maxConcurrentProbes: 4 },
   },
+  focused: {
+    id: 'focused',
+    label: 'Focused',
+    description:
+      'Spend budget on your Focus routes / OpenAPI URL. Shallow site crawl; best when you know high-value paths.',
+    etaMinutes: { min: 3, max: 12 },
+    discovery: {
+      maxPagesCrawl: 3,
+      maxOpenApiPaths: 80,
+      maxSitemapUrls: 5,
+      authMaxPagesCrawl: 3,
+      authRecrawl: true,
+      scriptScanLimit: 4,
+      pageSettleMs: 300,
+      homeSettleMs: 600,
+      prioritizeFocusSeeds: true,
+    },
+    safety: { requestTimeoutMs: 12000, maxConcurrentProbes: 5 },
+  },
 };
 
 export function resolveScanProfile(id?: string | null): ScanProfileOverrides {
   const key = String(id || 'standard').toLowerCase() as ScanProfileId;
   return SCAN_PROFILES[key] || SCAN_PROFILES.standard;
+}
+
+export function profileEtaLabel(profile: ScanProfileOverrides): string {
+  const { min, max } = profile.etaMinutes;
+  return min === max ? `~${min} min` : `~${min}–${max} min`;
 }
 
 /** Merge profile knobs into a shallow copy of platform config for one scan. */
@@ -95,4 +127,52 @@ export function applyProfileToConfig(
     },
   };
   return { config: next, profile };
+}
+
+/** Normalize user-supplied focus paths/URLs against the scan target. */
+export function normalizeFocusEndpoints(
+  targetUrl: string,
+  raw: unknown,
+  { limit = 40 }: { limit?: number } = {},
+): string[] {
+  if (!raw) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : String(raw)
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let origin: string;
+  try {
+    origin = new URL(targetUrl).origin;
+  } catch {
+    return [];
+  }
+  for (const item of list) {
+    if (out.length >= limit) break;
+    const s = String(item).trim();
+    if (!s) continue;
+    try {
+      let href: string;
+      if (/^https?:\/\//i.test(s)) href = new URL(s).href;
+      else if (s.startsWith('/')) href = new URL(s, origin).href;
+      else href = new URL(`/${s}`, origin).href;
+      const u = new URL(href);
+      // Keep related hosts (api. sibling) but drop obvious third parties
+      if (u.origin !== origin && !u.hostname.endsWith(origin.replace(/^https?:\/\//, '').split(':')[0])) {
+        const baseHost = new URL(origin).hostname.replace(/^www\./, '');
+        const root = baseHost.split('.').slice(-2).join('.');
+        if (!u.hostname.endsWith(root)) continue;
+      }
+      const key = u.href.split('#')[0];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
 }

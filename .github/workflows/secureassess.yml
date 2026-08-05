@@ -1,0 +1,141 @@
+name: SecureAssess
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Authorized target URL to scan (Quick profile)
+        required: false
+        type: string
+      profile:
+        description: Scan profile
+        required: false
+        default: quick
+        type: choice
+        options: [quick, standard, focused]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: CI gate self-check
+        run: |
+          node -e "
+          const { evaluateGate } = require('./scripts/ci-gate.js');
+          const r = evaluateGate([
+            { title: 'x', severity: 'High', confidence: 'Confirmed' }
+          ]);
+          if (r.ok) { console.error('expected fail'); process.exit(1); }
+          const p = evaluateGate([
+            { title: 'y', severity: 'Medium', confidence: 'Confirmed' }
+          ]);
+          if (!p.ok) { console.error('expected pass'); process.exit(1); }
+          console.log('ci-gate self-check ok');
+          "
+
+  security-scan:
+    name: Authorized DAST (optional)
+    runs-on: ubuntu-latest
+    needs: unit
+    # Dispatch with target_url, or configure repo variable SECUREASSESS_TARGET_URL.
+    # Optional secrets: SECUREASSESS_TARGET_URL, SECUREASSESS_USERNAME/PASSWORD, USERNAME2/PASSWORD2.
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.target_url != '') || vars.SECUREASSESS_TARGET_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Resolve target
+        id: target
+        env:
+          INPUT_URL: ${{ github.event.inputs.target_url }}
+          VAR_URL: ${{ vars.SECUREASSESS_TARGET_URL }}
+          SECRET_URL: ${{ secrets.SECUREASSESS_TARGET_URL }}
+        run: |
+          URL="${INPUT_URL:-${VAR_URL:-$SECRET_URL}}"
+          if [ -z "$URL" ]; then
+            echo "No target URL configured; skipping scan."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+      - name: Run SecureAssess (Quick)
+        if: steps.target.outputs.skip != 'true'
+        env:
+          SA_USER: ${{ secrets.SECUREASSESS_USERNAME }}
+          SA_PASS: ${{ secrets.SECUREASSESS_PASSWORD }}
+          SA_USER2: ${{ secrets.SECUREASSESS_USERNAME2 }}
+          SA_PASS2: ${{ secrets.SECUREASSESS_PASSWORD2 }}
+        run: |
+          set -e
+          PROFILE="${{ github.event.inputs.profile || 'quick' }}"
+          EXTRA=()
+          if [ -n "$SA_USER" ] && [ -n "$SA_PASS" ]; then
+            EXTRA+=(--username "$SA_USER" --password "$SA_PASS")
+          fi
+          if [ -n "$SA_USER2" ] && [ -n "$SA_PASS2" ]; then
+            EXTRA+=(--username2 "$SA_USER2" --password2 "$SA_PASS2")
+          fi
+          npm run scan -- \
+            --url "${{ steps.target.outputs.url }}" \
+            --profile "$PROFILE" \
+            --project "CI ${{ github.repository }}" \
+            --yes \
+            --out reports \
+            "${EXTRA[@]}"
+      - name: Locate artifacts
+        if: steps.target.outputs.skip != 'true'
+        id: arts
+        run: |
+          SARIF=$(ls -t reports/*.sarif.json 2>/dev/null | head -n1 || true)
+          JSON=$(ls -t reports/*.json 2>/dev/null | grep -v sarif | head -n1 || true)
+          echo "sarif=$SARIF" >> "$GITHUB_OUTPUT"
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+          echo "SARIF=$SARIF JSON=$JSON"
+      - name: Upload SARIF to code scanning
+        if: steps.target.outputs.skip != 'true' && steps.arts.outputs.sarif != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.arts.outputs.sarif }}
+      - name: Upload report artifacts
+        if: steps.target.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: secureassess-reports
+          path: reports/
+          if-no-files-found: warn
+      - name: Quality gate (Confirmed High/Critical)
+        if: steps.target.outputs.skip != 'true'
+        run: |
+          if [ -n "${{ steps.arts.outputs.json }}" ]; then
+            npm run ci:gate -- --json "${{ steps.arts.outputs.json }}"
+          elif [ -n "${{ steps.arts.outputs.sarif }}" ]; then
+            npm run ci:gate -- --sarif "${{ steps.arts.outputs.sarif }}"
+          else
+            echo "No report to gate"
+            exit 2
+          fi

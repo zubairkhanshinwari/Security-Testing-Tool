@@ -55,6 +55,25 @@
     .stack-list { margin:0; padding-left:16px; font-size:12px; color:#334155; }
     .endpoint-list { margin:8px 0 0; padding:0; list-style:none; font-size:11px; }
     .endpoint-list li { padding:4px 0; border-bottom:1px solid var(--line); font-family:Consolas,monospace; }
+    .delta-summary { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 12px; }
+    .delta-tile {
+      min-width:88px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    }
+    .delta-tile .n { font-size:22px; font-weight:750; color:var(--navy); line-height:1.1; }
+    .delta-tile .l { font-size:10px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.04em; margin-top:2px; }
+    .delta-tile.new { border-color:#fecaca; background:#fef2f2; }
+    .delta-tile.new .n { color:#991b1b; }
+    .delta-tile.fixed { border-color:#bbf7d0; background:#f0fdf4; }
+    .delta-tile.fixed .n { color:#166534; }
+    .badge {
+      display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+    }
+    .badge.new { background:#fee2e2; color:#991b1b; }
+    .badge.fixed { background:#dcfce7; color:#166534; }
+    .badge.unchanged { background:#e2e8f0; color:#334155; }
+    .badge.sev { background:#ffedd5; color:#9a3412; }
+    .reg-table-wrap { max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:10px; }
+    .reg-table-wrap table { margin:0; }
     @media (max-width:900px){ .grid{grid-template-columns:1fr;} .info-grid{grid-template-columns:1fr 1fr;} }
   </style>
 </head>
@@ -293,8 +312,10 @@
         </div>
         <h3 style="margin:8px 0;font-size:14px;color:var(--navy)">Stack & languages</h3>
         ${renderInventory(data.inventory)}
-        <div style="margin-top:14px">Regression: ${data.regression?.regressed ? 'YES — ' : 'No — '}${escapeHtml(data.regression?.details || '')}</div>
-        <div style="margin-top:10px"><strong>Trends</strong><br/>${trends}</div>`;
+        <h3 style="margin:16px 0 6px;font-size:14px;color:var(--navy)">Regression (latest vs previous)</h3>
+        <div class="muted" style="margin-bottom:6px">${data.regression?.regressed ? 'YES — ' : 'No — '}${escapeHtml(data.regression?.details || 'Need at least two scans to compare.')}</div>
+        ${renderRegressionCompare(data.baselineCompare)}
+        <div style="margin-top:14px"><strong>Trends</strong><br/>${trends}</div>`;
       const del = document.getElementById('detailDeleteBtn');
       if (del) del.onclick = () => deleteProject(data.project.id, data.project.name);
       const runBtn = document.getElementById('detailRunBtn');
@@ -305,6 +326,68 @@
           targetUrl: data.project.targetUrl || '',
         });
       }
+    }
+
+    function renderRegressionCompare(cmp) {
+      if (!cmp || cmp.ok === false) {
+        return `<div class="muted" style="margin-top:8px">${escapeHtml(cmp?.error || 'Run two assessments to see New / Fixed / Unchanged findings.')}</div>`;
+      }
+      const s = cmp.summary || {
+        newCount: (cmp.newFindings || []).length,
+        fixedCount: (cmp.fixed || cmp.resolved || []).length,
+        unchangedCount: (cmp.unchanged || cmp.persistent || []).length,
+        severityChangedCount: (cmp.changedSeverity || []).length,
+        net: (cmp.developerProgress && cmp.developerProgress.net) || 0,
+      };
+      const baseLabel = cmp.baseline?.code || (cmp.baseline?.id || '').slice(0, 8) || 'previous';
+      const currLabel = cmp.current?.code || (cmp.current?.id || '').slice(0, 8) || 'latest';
+      const rows = Array.isArray(cmp.rows) && cmp.rows.length
+        ? cmp.rows
+        : [
+            ...(cmp.newFindings || []).map((f) => ({ ...f, delta: 'New' })),
+            ...(cmp.changedSeverity || []).map((f) => ({
+              title: f.title,
+              severity: f.to,
+              previousSeverity: f.from,
+              endpoint: f.endpoint,
+              delta: 'SeverityChanged',
+            })),
+            ...(cmp.unchanged || cmp.persistent || []).map((f) => ({ ...f, delta: 'Unchanged' })),
+            ...(cmp.fixed || cmp.resolved || []).map((f) => ({ ...f, delta: 'Fixed' })),
+          ];
+
+      const badge = (delta) => {
+        if (delta === 'New') return '<span class="badge new">New</span>';
+        if (delta === 'Fixed') return '<span class="badge fixed">Fixed</span>';
+        if (delta === 'SeverityChanged') return '<span class="badge sev">Severity</span>';
+        return '<span class="badge unchanged">Unchanged</span>';
+      };
+
+      const body = rows.slice(0, 80).map((r) => `
+        <tr>
+          <td>${badge(r.delta)}</td>
+          <td>${escapeHtml(r.title || 'Finding')}</td>
+          <td><span class="pill ${String(r.severity||'').toLowerCase()==='high'||String(r.severity||'').toLowerCase()==='critical'?'high':'med'}">${escapeHtml(r.severity || '—')}${r.previousSeverity ? ' ← ' + escapeHtml(r.previousSeverity) : ''}</span></td>
+          <td class="muted" style="font-family:Consolas,monospace;max-width:280px;word-break:break-all">${escapeHtml(r.endpoint || '—')}</td>
+        </tr>`).join('') || '<tr><td colspan="4" class="muted">No issue findings to compare.</td></tr>';
+
+      return `
+        <div class="muted">Comparing <span class="code-id">${escapeHtml(baseLabel)}</span> → <span class="code-id">${escapeHtml(currLabel)}</span>
+          · score Δ ${Number(cmp.delta?.score || 0) >= 0 ? '+' : ''}${escapeHtml(cmp.delta?.score ?? 0)}
+          · net fixed ${s.net >= 0 ? '+' : ''}${escapeHtml(s.net)}</div>
+        <div class="delta-summary">
+          <div class="delta-tile new"><div class="n">${escapeHtml(s.newCount ?? 0)}</div><div class="l">New</div></div>
+          <div class="delta-tile fixed"><div class="n">${escapeHtml(s.fixedCount ?? 0)}</div><div class="l">Fixed</div></div>
+          <div class="delta-tile"><div class="n">${escapeHtml(s.unchangedCount ?? 0)}</div><div class="l">Unchanged</div></div>
+          <div class="delta-tile"><div class="n">${escapeHtml(s.severityChangedCount ?? 0)}</div><div class="l">Severity Δ</div></div>
+        </div>
+        <div class="reg-table-wrap">
+          <table>
+            <thead><tr><th>Delta</th><th>Finding</th><th>Severity</th><th>Endpoint</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+        ${rows.length > 80 ? `<div class="muted" style="margin-top:6px">Showing first 80 of ${rows.length} rows.</div>` : ''}`;
     }
 
     function escapeHtml(s) {

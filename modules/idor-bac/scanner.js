@@ -3,6 +3,10 @@ const { mappingsFor, cvssFor } = require(path.join(
   process.cwd(),
   'src/platform/core/standards/mappings.js',
 ));
+const { gradeFromSignals, evidenceWithSignals } = require(path.join(
+  process.cwd(),
+  'src/platform/plugins/confirmationSignals.js',
+));
 
 const SENSITIVE_JSON_RE =
   /("(email|phone|password|role|ssn|address|dob|dateOfBirth|creditCard|accountNumber|secret|apiKey|privateKey)"\s*:)/i;
@@ -32,7 +36,6 @@ function createPlugin(manifest) {
         if (m) {
           const base = String(ep.url).replace(OBJECT_PATH_RE, `/${m[1]}/{id}`);
           push(String(ep.url).split('?')[0], m[2], 'endpoint');
-          // Neighbor IDs for BOLA-style probe (GET only)
           push(base.replace('{id}', '1'), '1', 'neighbor');
           push(base.replace('{id}', '2'), '2', 'neighbor');
         }
@@ -70,96 +73,184 @@ function createPlugin(manifest) {
     },
 
     async scan(ctx, discovery) {
-      const request = ctx.page.context().request;
+      const primaryRequest = ctx.page.context().request;
       const timeout = Number(ctx.config?.safety?.requestTimeoutMs || 10000);
       const authHeaders = ctx.auth?.ok && ctx.auth?.headers ? ctx.auth.headers : {};
       const candidates = [];
 
-      for (const t of (discovery.targets || []).slice(0, 12)) {
-        try {
-          // Unauthenticated probe
-          const anon = await fetchProbe(request, t.url, {}, timeout);
-          candidates.push({ ...t, mode: 'anonymous', ...anon });
+      let altSession = null;
+      try {
+        altSession = await establishAltSession(ctx);
+      } catch {
+        altSession = null;
+      }
 
-          // Authenticated probe (if session present) — still GET-only
-          if (Object.keys(authHeaders).length) {
-            const authed = await fetchProbe(request, t.url, authHeaders, timeout);
-            candidates.push({ ...t, mode: 'authenticated', ...authed });
+      try {
+        for (const t of (discovery.targets || []).slice(0, 12)) {
+          try {
+            const anon = await fetchProbe(primaryRequest, t.url, {}, timeout);
+            candidates.push({ ...t, mode: 'anonymous', ...anon });
+
+            if (Object.keys(authHeaders).length) {
+              const authed = await fetchProbe(primaryRequest, t.url, authHeaders, timeout);
+              candidates.push({ ...t, mode: 'authenticated', ...authed });
+            }
+
+            // Negative control: nonexistent id should not return the same sensitive 200
+            const negUrl = negativeControlUrl(t.url);
+            if (negUrl) {
+              const negHeaders = Object.keys(authHeaders).length ? authHeaders : {};
+              const neg = await fetchProbe(primaryRequest, negUrl, negHeaders, timeout);
+              candidates.push({
+                ...t,
+                mode: 'negative-control',
+                negativeOf: t.url,
+                ...neg,
+              });
+            }
+
+            // Dual-account: user B session against same object URL
+            if (altSession) {
+              const cross = await fetchProbe(altSession.request, t.url, altSession.headers, timeout);
+              candidates.push({
+                ...t,
+                mode: 'cross-user',
+                ...cross,
+                altUser: true,
+              });
+            }
+          } catch {
+            /* continue */
           }
-        } catch {
-          /* continue */
         }
+      } finally {
+        if (altSession?.close) await altSession.close().catch(() => undefined);
       }
       return candidates;
     },
 
     async verify(_ctx, candidates) {
       const findings = [];
-      const hits = (candidates || []).filter(isSensitiveExposure);
-      const report = hits.length ? hits.slice(0, 6) : (candidates || []).slice(0, 1);
+      const byUrl = groupByUrl(candidates || []);
+      const urls = Object.keys(byUrl).slice(0, 8);
 
-      // Precision: prefer anonymous exposures; require JSON content-type (not HTML soft-404s)
-      for (const c of report) {
-        const issueFound = isSensitiveExposure(c);
-        const jsonTyped = /json/i.test(c.contentType || '');
-        const strong = issueFound && jsonTyped;
-        const severity = strong
-          ? c.mode === 'anonymous'
+      for (const url of urls) {
+        const group = byUrl[url];
+        const anon = group.find((c) => c.mode === 'anonymous' && isSensitiveExposure(c));
+        const authed = group.find((c) => c.mode === 'authenticated' && isSensitiveExposure(c));
+        const cross = group.find((c) => c.mode === 'cross-user' && isSensitiveExposure(c));
+        const neg = group.find((c) => c.mode === 'negative-control');
+        const hit = cross || anon || authed;
+        if (!hit) continue;
+
+        const signals = [];
+        const jsonTyped = /json/i.test(hit.contentType || '');
+        if (jsonTyped) signals.push('json-typed', 'evidence');
+        if (anon) signals.push('evidence');
+        if (cross) signals.push('cross-user', 'evidence');
+        if (
+          neg &&
+          hit.status === 200 &&
+          (neg.status === 403 || neg.status === 404 || neg.status === 401 || !isSensitiveExposure(neg))
+        ) {
+          signals.push('negative-control');
+        }
+        if (hit.http?.length >= 1) signals.push('http');
+
+        const confidence = gradeFromSignals(signals, { issueFound: true });
+        const severity =
+          confidence === 'Confirmed'
             ? 'High'
-            : 'Medium'
-          : issueFound
-            ? 'Medium'
-            : 'Informational';
+            : cross || (anon && jsonTyped)
+              ? 'High'
+              : 'Medium';
+
+        const titleMode = cross
+          ? 'cross-user Account B'
+          : hit.mode === 'anonymous'
+            ? 'anonymous'
+            : 'authenticated Account A';
+
         findings.push({
           pluginId: manifest.id,
-          title: issueFound
-            ? `Possible IDOR / BOLA on ${shortPath(c.url)} (${c.mode})`
-            : 'No obvious IDOR / broken object access on probed endpoints',
-          description: issueFound
-            ? `A ${c.mode} GET to an object endpoint returned user/object-like JSON fields without apparent authorization failure.`
-            : 'Safe GET probes against object-style endpoints did not return clear unauthorized sensitive JSON.',
+          title: `IDOR / BOLA on ${shortPath(hit.url)} (${titleMode})`,
+          description: buildIdorDescription(hit, { cross: Boolean(cross), negOk: signals.includes('negative-control') }),
           severity,
-          confidence: strong ? 'Likely' : issueFound ? 'Possible' : 'Informational',
+          confidence,
           cvss: cvssFor('idor', severity),
           mappings: {
             ...mappingsFor('idor'),
-            cwe: issueFound ? ['CWE-639', 'CWE-284'] : mappingsFor('idor').cwe,
+            cwe: ['CWE-639', 'CWE-284'],
           },
-          affectedUrl: c.url,
-          affectedEndpoint: c.url,
-          parameter: c.objectId || 'id',
+          affectedUrl: hit.url,
+          affectedEndpoint: hit.url,
+          parameter: hit.objectId || 'id',
           method: 'GET',
           evidence: [
-            {
-              technique: 'IDOR/BOLA GET probe',
-              mode: c.mode,
-              status: c.status,
-              contentType: c.contentType,
-              bodySnippet: (c.bodySnippet || '').slice(0, 280),
-              significant: strong,
-              baselineDiff: strong ? { signals: ['sensitive-json', c.mode] } : null,
-            },
+            evidenceWithSignals(
+              cross
+                ? 'IDOR/BOLA dual-account proof (Account A object → Account B session)'
+                : 'IDOR/BOLA GET probe (Account A / anonymous)',
+              signals,
+              {
+                mode: hit.mode,
+                accountRole: cross ? 'Account B against Account A object' : hit.mode === 'anonymous' ? 'anonymous' : 'Account A',
+                status: hit.status,
+                contentType: hit.contentType,
+                bodySnippet: (hit.bodySnippet || '').slice(0, 280),
+                crossUser: Boolean(cross),
+                negativeControl: signals.includes('negative-control'),
+                confirmationSignals: signals,
+              },
+            ),
+            ...(cross
+              ? [
+                  evidenceWithSignals('cross-user-access (Account B)', ['cross-user'], {
+                    mode: 'cross-user',
+                    accountRole: 'Account B',
+                    status: cross.status,
+                    bodySnippet: (cross.bodySnippet || '').slice(0, 160),
+                    note: 'Account B session retrieved sensitive data for an object associated with Account A discovery.',
+                  }),
+                ]
+              : []),
+            ...(neg
+              ? [
+                  evidenceWithSignals('negative-control', ['negative-control'], {
+                    url: neg.url,
+                    status: neg.status,
+                    sensitive: isSensitiveExposure(neg),
+                  }),
+                ]
+              : []),
           ],
-          http: c.http || [],
-          impact: issueFound
-            ? 'Attackers may read other users’ or objects’ data by changing identifiers.'
-            : 'None',
+          http: [...(hit.http || []), ...(cross?.http || []), ...(neg?.http || [])].slice(0, 6),
+          impact: cross
+            ? 'Account B can read Account A’s object data by identifier — broken object-level authorization (BOLA).'
+            : 'Attackers may read other users’ or objects’ data by changing identifiers.',
           remediation:
-            'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized.',
+            'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized. Retest with dual accounts (Account A + Account B) in CI.',
           references: [
             'https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/',
             'https://cwe.mitre.org/data/definitions/639.html',
           ],
-          status: issueFound ? 'Likely' : 'Pass',
-          issueFound,
+          status:
+            confidence === 'Confirmed' ? 'Confirmed' : confidence === 'Likely' ? 'Likely' : 'Possible',
+          issueFound: true,
           testMode: 'active-safe',
           module: 'Broken Access Control / IDOR',
-          techniques: strong
-            ? ['Broken Access Control', 'IDOR Testing', 'JSON content-type check']
-            : ['Broken Access Control', 'IDOR Testing'],
+          techniques: [
+            'Broken Access Control',
+            'IDOR Testing',
+            ...(jsonTyped ? ['JSON content-type check'] : []),
+            ...(cross ? ['Dual-account access (Account A → Account B)'] : []),
+            ...(signals.includes('negative-control') ? ['Negative control'] : []),
+          ],
         });
       }
-      return findings;
+
+      if (!findings.length) findings.push(passFinding(manifest, (candidates || [])[0]));
+      return findings.slice(0, 6);
     },
 
     async report(findings) {
@@ -172,6 +263,132 @@ function createPlugin(manifest) {
       return { delta: f.severity === 'High' ? 22 : 12, notes: [] };
     },
   };
+}
+
+function passFinding(manifest, sample) {
+  return {
+    pluginId: manifest.id,
+    title: 'No obvious IDOR / broken object access on probed endpoints',
+    description:
+      'Safe GET probes against object-style endpoints did not return clear unauthorized sensitive JSON.',
+    severity: 'Informational',
+    confidence: 'Informational',
+    cvss: cvssFor('idor', 'Informational'),
+    mappings: mappingsFor('idor'),
+    affectedUrl: sample?.url || '',
+    affectedEndpoint: sample?.url || '',
+    parameter: 'id',
+    method: 'GET',
+    evidence: [{ technique: 'IDOR/BOLA GET probe', status: sample?.status || 0 }],
+    http: sample?.http || [],
+    impact: 'None',
+    remediation:
+      'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized.',
+    references: [
+      'https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/',
+    ],
+    status: 'Pass',
+    issueFound: false,
+    testMode: 'active-safe',
+    module: 'Broken Access Control / IDOR',
+    techniques: ['Broken Access Control', 'IDOR Testing'],
+  };
+}
+
+function buildIdorDescription(hit, { cross, negOk }) {
+  const parts = [];
+  if (cross) {
+    parts.push(
+      'Dual-account proof: an object URL discovered under Account A returned sensitive fields when requested with Account B’s session (cross-user / BOLA).',
+    );
+  } else if (hit.mode === 'anonymous') {
+    parts.push(
+      'An unauthenticated GET to an object endpoint returned user/object-like JSON fields without an authorization failure.',
+    );
+  } else {
+    parts.push(
+      'An authenticated (Account A) GET to an object endpoint returned user/object-like JSON fields without an apparent authorization failure.',
+    );
+  }
+  if (negOk) parts.push('A negative-control object ID did not return the same sensitive exposure.');
+  return parts.join(' ');
+}
+
+function groupByUrl(candidates) {
+  const map = {};
+  for (const c of candidates) {
+    const key = (c.negativeOf || c.url || '').split('?')[0];
+    if (!key) continue;
+    if (!map[key]) map[key] = [];
+    map[key].push(c);
+  }
+  return map;
+}
+
+function negativeControlUrl(url) {
+  try {
+    if (OBJECT_PATH_RE.test(url)) {
+      return url.replace(OBJECT_PATH_RE, (_m, coll) => `/${coll}/999999991`);
+    }
+    const hasScheme = /^https?:\/\//i.test(url);
+    const u = new URL(
+      hasScheme ? url : `https://placeholder.local${url.startsWith('/') ? url : `/${url}`}`,
+    );
+    for (const key of ['id', 'userId', 'accountId', 'orderId']) {
+      if (u.searchParams.has(key)) {
+        u.searchParams.set(key, '999999991');
+        return hasScheme ? u.toString() : `${u.pathname}${u.search}`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function establishAltSession(ctx) {
+  const u2 = ctx.request?.username2;
+  const p2 = ctx.request?.password2;
+  if (!u2 || !p2) return null;
+
+  const browser = ctx.page?.context?.()?.browser?.();
+  if (!browser) return null;
+
+  const { loginWithCredentials } = require(path.join(process.cwd(), 'src/scanner/login.js'));
+  const altCtx = await browser.newContext();
+  const altPage = await altCtx.newPage();
+  try {
+    const origin = new URL(ctx.request.targetUrl).origin;
+    const result = await loginWithCredentials(altPage, {
+      username: u2,
+      password: p2,
+      apiBases: ctx.attackSurface?.apiBases || [],
+      origin,
+      loginUrl: ctx.request.targetUrl,
+    });
+    if (!result.ok) {
+      await altCtx.close();
+      return null;
+    }
+    const headers = {};
+    const isCookie =
+      result.sessionType === 'cookie' || String(result.token || '').startsWith('cookie:');
+    if (!isCookie && result.token) {
+      headers.authorization = /^Bearer\s+/i.test(result.token)
+        ? result.token
+        : `Bearer ${result.token}`;
+    }
+    // Cookie sessions: altCtx.request already carries Set-Cookie from login
+    return {
+      headers,
+      request: altCtx.request,
+      close: () => altCtx.close(),
+      sessionType: result.sessionType,
+    };
+  } catch (e) {
+    await altCtx.close().catch(() => undefined);
+    throw e;
+  }
 }
 
 function isSensitiveExposure(c) {

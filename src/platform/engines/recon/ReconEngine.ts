@@ -15,6 +15,8 @@ export interface ReconDiscoverOptions {
   pageSettleMs?: number;
   homeSettleMs?: number;
   scriptScanLimit?: number;
+  /** Explicit OpenAPI/Swagger URLs supplied by the operator */
+  openApiUrls?: string[];
 }
 
 /**
@@ -57,11 +59,15 @@ export class ReconEngine {
     });
 
     let openapiEndpoints: ReturnType<typeof parseOpenApiDocument> = [];
-    if (options.parseOpenApi !== false && extras.openapiCandidates?.length) {
+    const openApiCandidates = [
+      ...(options.openApiUrls || []),
+      ...(extras.openapiCandidates || []),
+    ];
+    if (options.parseOpenApi !== false && openApiCandidates.length) {
       openapiEndpoints = await this.parseOpenApiCandidates(
         request,
         origin,
-        extras.openapiCandidates,
+        [...new Set(openApiCandidates)],
         options.maxOpenApiPaths ?? 30,
       );
     }

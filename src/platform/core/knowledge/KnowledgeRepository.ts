@@ -368,11 +368,17 @@ export class KnowledgeRepository {
           1,
           Math.round((finishedAt.getTime() - startedAt.getTime()) / 60000),
         ),
-        authUsed: Boolean(auth.ok && (auth.token || auth.type === 'cookie')),
+        authUsed: Boolean(auth.ok && auth.ready !== false && (auth.token || auth.type === 'cookie' || auth.type === 'jwt')),
         loginAttempted: Boolean(request.username && request.password),
         loginSuccess: Boolean(
-          auth.ok && (auth.type === 'password' || auth.type === 'cookie' || auth.type === 'discovered'),
+          auth.ok &&
+            auth.ready !== false &&
+            (auth.type === 'password' ||
+              auth.type === 'cookie' ||
+              auth.type === 'jwt' ||
+              auth.type === 'discovered'),
         ),
+        authAdapter: auth.adapter || null,
         loginMessage: auth.message,
         securityTypesRequested: requestedTypes,
         securityTypes: selectedTypes,
@@ -390,6 +396,12 @@ export class KnowledgeRepository {
         knowledgeRepository: true,
         scanProfile: request.profile || this.plan?.profile || 'standard',
         precisionPack: 'verification-baseline-v1',
+        confirmationPack: 'confirmation-depth-v1',
+        coveragePack: 'coverage-focus-v1',
+        focusEndpointCount: Array.isArray(request.focusEndpoints)
+          ? request.focusEndpoints.length
+          : 0,
+        openApiUrl: request.openApiUrl || null,
         safety: {
           nonDestructive: true,
           authorizationRequired: true,

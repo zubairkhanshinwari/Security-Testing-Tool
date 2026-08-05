@@ -85,7 +85,14 @@ describe('VerificationEngine', () => {
         mappings: { cwe: ['CWE-943'] },
         affectedUrl: 'u',
         affectedEndpoint: 'e',
-        evidence: ['a', 'b'],
+        evidence: [
+          {
+            technique: 'Boolean Logic Validation',
+            signals: ['boolean-diff', 'reproducible'],
+            confirmationSignals: ['boolean-diff', 'reproducible'],
+          },
+          { technique: 'baseline-compare', baselineDiff: { signals: ['body-diff'] } },
+        ],
         http: [
           { request: { method: 'GET', url: 'u1' }, response: { status: 200 } },
           { request: { method: 'GET', url: 'u2' }, response: { status: 200 } },

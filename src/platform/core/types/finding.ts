@@ -76,11 +76,12 @@ export interface Finding {
   module?: string;
   featureName?: string;
   techniques?: string[];
-  /** Populated by VerificationEngine (Phase 5) */
+  /** Populated by VerificationEngine (Phase 5 / confirmation-depth) */
   verification?: {
     signalCount: number;
     signals: string[];
     retestRecommended?: boolean;
+    retested?: boolean;
   };
   /** Legacy bridge fields */
   cwe?: string[];
@@ -138,6 +139,12 @@ export interface AuthSession {
   cookies?: Record<string, string>;
   message?: string;
   endpoint?: string;
+  /** Which auth adapter succeeded (api-token | cookie-session | spa-form | …) */
+  adapter?: string;
+  /** True only after post-login settle + session proof (token/cookie/left-login) */
+  ready?: boolean;
+  proof?: string[];
+  postLoginUrl?: string;
 }
 
 export interface ScanRequest {
@@ -148,6 +155,9 @@ export interface ScanRequest {
   testerName?: string;
   username?: string | null;
   password?: string | null;
+  /** Second account for dual-user IDOR / BOLA confirmation */
+  username2?: string | null;
+  password2?: string | null;
   authHeader?: string | null;
   apiKey?: string | null;
   securityTypes?: string[];
@@ -156,8 +166,12 @@ export interface ScanRequest {
   mode?: TestMode;
   /** Phase 6: reuse project baseline; prioritize new endpoints + prior confirmed issues */
   incremental?: boolean;
-  /** Precision pack: quick | standard | deep */
-  profile?: 'quick' | 'standard' | 'deep' | string;
+  /** Coverage pack: quick | standard | deep | focused */
+  profile?: 'quick' | 'standard' | 'deep' | 'focused' | string;
+  /** High-value routes/paths to seed discovery and prioritize probes */
+  focusEndpoints?: string[];
+  /** Optional OpenAPI/Swagger document URL to parse into the attack surface */
+  openApiUrl?: string | null;
   signal?: AbortSignal;
   onProgress?: (p: { stage: string; message: string; percent?: number }) => void;
 }

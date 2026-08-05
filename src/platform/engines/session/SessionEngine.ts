@@ -5,8 +5,8 @@ import type { BrowserEngine } from '../browser/BrowserEngine';
 import type { KnowledgeRepository } from '../../core/knowledge';
 
 /**
- * Session Engine — login, token recovery, header injection into the browser context.
- * Prefers discovery data from KnowledgeRepository when available (Phase 2).
+ * Session Engine — adaptive login, token recovery, header injection.
+ * Blocks auth-recrawl until session.ready is true.
  */
 export class SessionEngine {
   constructor(
@@ -37,13 +37,42 @@ export class SessionEngine {
       }
     }
 
-    if (session.ok && session.headers) {
-      await this.browser.setExtraHTTPHeaders(session.headers);
+    // Final browser settle before callers start authenticated discovery
+    if (session.ok) {
+      await this.stabilizeBrowser(page);
+      if (session.headers && Object.keys(session.headers).length) {
+        await this.browser.setExtraHTTPHeaders(session.headers);
+      }
+      session = { ...session, ready: session.ready !== false };
+      this.logger.info('Session established', {
+        type: session.type,
+        adapter: session.adapter,
+        ready: session.ready,
+        endpoint: session.endpoint,
+      });
     }
 
     if (repo) repo.setSession(session);
 
     return session;
+  }
+
+  private async stabilizeBrowser(page: any) {
+    try {
+      await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    } catch {
+      /* ignore */
+    }
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 5000 });
+    } catch {
+      /* ignore */
+    }
+    try {
+      await page.waitForTimeout(500);
+    } catch {
+      /* ignore */
+    }
   }
 
   private recoverFromTraffic(recon: {
@@ -59,8 +88,10 @@ export class SessionEngine {
       ok: true,
       type: 'discovered',
       token: raw.replace(/^Bearer\s+/i, ''),
-      headers: { authorization: raw },
+      headers: { authorization: raw.startsWith('Bearer') ? raw : `Bearer ${raw}` },
       message: 'Token discovered from application traffic/storage',
+      adapter: 'traffic-recovery',
+      ready: true,
     };
   }
 }

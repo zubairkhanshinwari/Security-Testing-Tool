@@ -188,14 +188,28 @@
           <div>
             <label class="field" for="scanProfile">Scan profile</label>
             <select id="scanProfile">
-              <option value="quick">Quick — faster smoke (~2–4 min)</option>
-              <option value="standard" selected>Standard — balanced (default)</option>
-              <option value="deep">Deep — broader crawl/probes</option>
+              <option value="quick">Quick — smoke / CI (~2–4 min)</option>
+              <option value="standard" selected>Standard — balanced (~4–10 min)</option>
+              <option value="deep">Deep — broader crawl (~15–35 min)</option>
+              <option value="focused">Focused — your routes / OpenAPI (~3–12 min)</option>
             </select>
-            <p class="hint">Quick for smoke checks; Standard for most assessments; Deep when you need more coverage.</p>
+            <p class="hint" id="profileHint">
+              Caps keep scans usable. Deep is slower and still may miss obscure routes — add Focus routes for critical areas.
+            </p>
           </div>
-          <div></div>
+          <div>
+            <label class="field" for="openApiUrl">OpenAPI / Swagger URL (optional)</label>
+            <input id="openApiUrl" type="url" placeholder="https://dev.example.com/openapi.json" />
+            <p class="hint">Parsed into the attack surface (respects profile path caps).</p>
+          </div>
         </div>
+
+        <label class="field" for="focusEndpoints">Focus routes (optional)</label>
+        <textarea id="focusEndpoints" rows="3" placeholder="/api/users&#10;/admin/settings&#10;https://dev.example.com/api/orders/1" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:13px;font-family:Consolas,monospace;resize:vertical"></textarea>
+        <p class="hint">
+          One path or URL per line (or comma-separated). Seeded into discovery and prioritized for probes.
+          Use with <strong>Focused</strong> profile to spend time on these instead of a wide crawl.
+        </p>
 
         <div class="row">
           <div>
@@ -203,14 +217,14 @@
             <input id="testerName" type="text" value="Security Assessment Tool" />
           </div>
           <div>
-            <label class="field" for="username">Username / Email (optional)</label>
-            <input id="username" type="text" placeholder="user@example.com" autocomplete="username" />
+            <label class="field" for="username">Account A — username / email (optional)</label>
+            <input id="username" type="text" placeholder="account-a@example.com" autocomplete="username" />
           </div>
         </div>
 
-        <label class="field" for="password">Password (optional)</label>
+        <label class="field" for="password">Account A — password (optional)</label>
         <div class="password-field">
-          <input id="password" type="password" placeholder="Used only to obtain a session token for authenticated testing" autocomplete="current-password" />
+          <input id="password" type="password" placeholder="Session for authenticated probes (Account A)" autocomplete="current-password" />
           <button type="button" id="togglePassword" class="password-toggle" aria-label="Show password" title="Show password" aria-pressed="false">
             <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
@@ -218,9 +232,22 @@
             </svg>
           </button>
         </div>
+        <div class="row">
+          <div>
+            <label class="field" for="username2">Account B — username / email (optional, IDOR)</label>
+            <input id="username2" type="text" placeholder="account-b@example.com" autocomplete="off" />
+          </div>
+          <div>
+            <label class="field" for="password2">Account B — password (optional)</label>
+            <div class="password-field">
+              <input id="password2" type="password" placeholder="Cross-user BOLA confirmation (Account B)" autocomplete="off" />
+            </div>
+          </div>
+        </div>
         <div class="auth-box">
-          Username and password are optional. If provided, the tool will attempt login against discovered
-          auth APIs, obtain a token, and complete authenticated analysis.
+          <strong>Account A</strong> authenticates the primary crawl and probes.
+          Add <strong>Account B</strong> (same role preferred) to confirm IDOR/BOLA: Account B’s session is used against
+          object URLs discovered under Account A. Login uses discovered auth APIs or the UI form.
         </div>
 
         <div class="sec-head">
@@ -586,6 +613,21 @@
       }
     }
 
+    (function wireProfileHint() {
+      const sel = document.getElementById('scanProfile');
+      const hint = document.getElementById('profileHint');
+      if (!sel || !hint) return;
+      const tips = {
+        quick: 'Quick (~2–4 min): shallow crawl for smoke/CI. Low coverage by design.',
+        standard: 'Standard (~4–10 min): balanced default. Good for most assessments.',
+        deep: 'Deep (~15–35 min): broader crawl/OpenAPI. Still may miss obscure routes — add Focus routes for critical modules.',
+        focused: 'Focused (~3–12 min): spends budget on Focus routes + OpenAPI URL. Shallow site-wide crawl.',
+      };
+      const sync = () => { hint.textContent = tips[sel.value] || tips.standard; };
+      sel.addEventListener('change', sync);
+      sync();
+    })();
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorBox.classList.remove('show');
@@ -615,9 +657,13 @@
         testerName: document.getElementById('testerName').value.trim(),
         username: document.getElementById('username').value.trim(),
         password: document.getElementById('password').value,
+        username2: document.getElementById('username2').value.trim(),
+        password2: document.getElementById('password2').value,
         securityTypes: types,
         incremental: document.getElementById('incremental').checked,
         profile: document.getElementById('scanProfile').value || 'standard',
+        focusEndpoints: document.getElementById('focusEndpoints').value,
+        openApiUrl: document.getElementById('openApiUrl').value.trim(),
         authorized: true,
       };
       document.getElementById('msgText').textContent =

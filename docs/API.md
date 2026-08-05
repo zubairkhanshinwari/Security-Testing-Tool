@@ -27,8 +27,13 @@ Base URL: `http://localhost:3847`
   "testerName": "Analyst",
   "username": "optional",
   "password": "optional",
+  "username2": "optional-second-account-for-idor",
+  "password2": "optional",
   "apiKey": "optional",
   "authHeader": "optional",
+  "profile": "standard",
+  "focusEndpoints": ["/api/users", "/admin/settings"],
+  "openApiUrl": "https://dev.example.com/openapi.json",
   "securityTypes": ["sqli", "nosqli", "http_headers"],
   "pluginIds": ["sql-injection"],
   "mode": "active-safe",
@@ -54,9 +59,10 @@ Completed payload includes `stats`, `meta`, `risk`, and `files` (`html`, `pdf`, 
 |--------|------|-------------|
 | GET | `/api/projects` | List projects |
 | POST | `/api/projects` | Create `{ name, targetUrl }` |
-| GET | `/api/projects/:id` | Detail + trends + regression |
+| GET | `/api/projects/:id` | Detail + trends + regression + `baselineCompare` (New/Fixed/Unchanged) |
 | DELETE | `/api/projects/:id` | Delete project + its scan history |
 | GET | `/api/scans` | List scans (`?projectId=`) |
+| GET | `/api/scans/compare` | Compare two scans (`baselineId`+`currentId`) or latest pair (`projectId`) |
 | GET | `/api/scans/:id` | Scan meta + result |
 
 ## Authorization

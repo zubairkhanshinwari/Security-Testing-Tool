@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./package.json)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](./package.json)
-[![License](https://img.shields.io/badge/license-ISC-lightgrey.svg)](#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Tests](https://img.shields.io/badge/tests-vitest-yellow.svg)](./package.json)
 [![Playwright](https://img.shields.io/badge/browser-Playwright-45ba4b.svg)](https://playwright.dev/)
 
@@ -28,6 +28,7 @@
 - [Configuration](#configuration)
 - [Safety principles](#safety-principles)
 - [Development guide](#development-guide)
+- [Demo targets](#demo-targets)
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
 - [Documentation](#documentation)
@@ -579,6 +580,33 @@ npm run start:dev
 npm run scan -- --url https://dev.example.com --yes
 ```
 
+### Demo targets
+
+Prove the install without using a production app:
+
+| Path | Target | Doc |
+|------|--------|-----|
+| Smoke | `https://httpbin.org` (Quick) | [Demo Targets](docs/Demo-Targets.md#a-smoke--httpbin) |
+| Lab | OWASP Juice Shop on Docker (`localhost:3000`) | [Demo Targets](docs/Demo-Targets.md#b-lab--owasp-juice-shop) |
+
+```bash
+# Smoke (fast)
+npm run scan -- --url https://httpbin.org --profile quick --yes --out reports
+
+# Lab (Docker Juice Shop must be running on :3000)
+npm run scan -- --url http://localhost:3000 --profile quick --yes --out reports
+```
+
+Full steps, focused routes, dual-account notes: [docs/Demo-Targets.md](docs/Demo-Targets.md).
+
+### CI gate (Confirmed High/Critical)
+
+```bash
+npm run ci:gate -- --json reports/<scan>.json
+```
+
+See [docs/CI-Packaging.md](docs/CI-Packaging.md) and `.github/workflows/secureassess.yml`.
+
 ### Tests, lint, typecheck
 
 ```bash
@@ -594,6 +622,7 @@ npm run typecheck
 | `npm run build` | Compile TypeScript |
 | `npm run build:run` | Build then start |
 | `npm run scan` | Platform CLI |
+| `npm run ci:gate` | Fail CI on Confirmed High/Critical |
 | `npm test` | Vitest |
 | `npm run lint` | ESLint |
 | `npm run format` | Prettier |
@@ -662,8 +691,10 @@ See [Plugin Development Guide](docs/Plugin-Development-Guide.md).
 - Baseline compare extended across more injection families (SQLi, SSTI, redirect)  
 - Dual-account IDOR (user A vs user B) for stronger BAC confirmation  
 - First-class incremental regression UI (new / fixed / unchanged findings)  
-- CI-oriented Quick profile defaults + documented SARIF/JUnit gates  
-- `CONTRIBUTING.md` and `SECURITY.md` at repository root  
+- In-repo “known good” fixture for deterministic CI assertions  
+- `CONTRIBUTING.md` at repository root  
+
+
 
 ### Future
 
@@ -688,16 +719,18 @@ See [Plugin Development Guide](docs/Plugin-Development-Guide.md).
 | [Developer Guide](docs/Developer-Guide.md) | Available |
 | [Deployment Guide](docs/Deployment-Guide.md) | Available |
 | [Module Documentation](docs/Module-Documentation.md) | Available |
-| Security Policy (`SECURITY.md`) | Placeholder — planned |
+| [Demo Targets](docs/Demo-Targets.md) | Available — httpbin smoke + Juice Shop lab |
+| [CI Packaging](docs/CI-Packaging.md) | Available |
+| [Security Policy](./SECURITY.md) | Available — private advisory + email |
 | Contributing Guide (`CONTRIBUTING.md`) | Placeholder — see [Contributing](#contributing) |
 
 ---
 
 ## License
 
-This project is licensed under the **ISC License** (see `package.json`).
+Copyright (c) 2026 Zubair Khan Shinwari. Licensed under the [MIT License](./LICENSE).
 
-A dedicated `LICENSE` file may be added at the repository root for GitHub license detection.
+Use SecureAssess only on systems you own or are explicitly authorized to test. The software is provided as-is; assessment results are not a guarantee of security.
 
 ---
 
@@ -709,7 +742,7 @@ A dedicated `LICENSE` file may be added at the repository root for GitHub licens
 | **Feature request** | Open a GitHub Issue with the use case, expected behavior, and safety constraints. |
 | **Questions** | Use GitHub Discussions (if enabled) or an Issue labeled `question`. |
 
-For security-sensitive disclosures about SecureAssess itself, prefer a private security advisory channel once `SECURITY.md` is published.
+For security-sensitive disclosures about SecureAssess itself, see [SECURITY.md](./SECURITY.md) (GitHub private advisory preferred; email also accepted).
 
 ---
 

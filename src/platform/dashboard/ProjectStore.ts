@@ -332,46 +332,99 @@ export class ProjectStore {
       return { ok: false as const, error: 'Both scans must exist with persisted results' };
     }
 
-    const keyOf = (f: any) =>
-      `${(f.mappings?.cwe || f.cwe || []).join(',')}|${(f.title || '').replace(/via.*/i, '').trim().toLowerCase()}|${f.affectedEndpoint || f.endpoint || ''}`;
-
     const baseIssues = new Map<string, any>(
       (baseline.result.findings || [])
         .filter((f: any) => f.issueFound)
-        .map((f: any) => [keyOf(f), f]),
+        .map((f: any) => [findingFamilyKey(f), f]),
     );
     const currIssues = new Map<string, any>(
       (current.result.findings || [])
         .filter((f: any) => f.issueFound)
-        .map((f: any) => [keyOf(f), f]),
+        .map((f: any) => [findingFamilyKey(f), f]),
     );
 
-    const resolved: any[] = [];
+    const fixed: any[] = [];
     const neu: any[] = [];
     const changedSeverity: any[] = [];
-    const persistent: any[] = [];
+    const unchanged: any[] = [];
+    const rows: Array<{
+      delta: 'New' | 'Fixed' | 'Unchanged' | 'SeverityChanged';
+      title: string;
+      severity: string;
+      previousSeverity?: string;
+      endpoint: string;
+      confidence?: string;
+      cwe?: string[];
+    }> = [];
 
     for (const [k, bf] of baseIssues) {
       const cf = currIssues.get(k);
-      if (!cf) resolved.push(summarizeFinding(bf));
-      else if (cf.severity !== bf.severity) {
+      if (!cf) {
+        const s = summarizeFinding(bf);
+        fixed.push(s);
+        rows.push({
+          delta: 'Fixed',
+          title: s.title,
+          severity: s.severity,
+          endpoint: s.endpoint || '',
+          confidence: s.confidence,
+          cwe: s.cwe,
+        });
+      } else if (cf.severity !== bf.severity) {
         changedSeverity.push({
           title: cf.title,
           from: bf.severity,
           to: cf.severity,
           endpoint: cf.affectedEndpoint || cf.endpoint,
         });
-        persistent.push(summarizeFinding(cf));
-      } else persistent.push(summarizeFinding(cf));
+        const s = summarizeFinding(cf);
+        unchanged.push(s);
+        rows.push({
+          delta: 'SeverityChanged',
+          title: s.title,
+          severity: s.severity,
+          previousSeverity: bf.severity,
+          endpoint: s.endpoint || '',
+          confidence: s.confidence,
+          cwe: s.cwe,
+        });
+      } else {
+        const s = summarizeFinding(cf);
+        unchanged.push(s);
+        rows.push({
+          delta: 'Unchanged',
+          title: s.title,
+          severity: s.severity,
+          endpoint: s.endpoint || '',
+          confidence: s.confidence,
+          cwe: s.cwe,
+        });
+      }
     }
     for (const [k, cf] of currIssues) {
-      if (!baseIssues.has(k)) neu.push(summarizeFinding(cf));
+      if (!baseIssues.has(k)) {
+        const s = summarizeFinding(cf);
+        neu.push(s);
+        rows.push({
+          delta: 'New',
+          title: s.title,
+          severity: s.severity,
+          endpoint: s.endpoint || '',
+          confidence: s.confidence,
+          cwe: s.cwe,
+        });
+      }
     }
+
+    // Prefer New → SeverityChanged → Unchanged → Fixed for UI scanning
+    const order = { New: 0, SeverityChanged: 1, Unchanged: 2, Fixed: 3 } as const;
+    rows.sort((a, b) => order[a.delta] - order[b.delta] || String(a.title).localeCompare(String(b.title)));
 
     return {
       ok: true as const,
       baseline: {
         id: baseline.meta.id,
+        code: baseline.meta.code,
         score: baseline.meta.score,
         risk: baseline.meta.risk,
         findings: baseline.meta.findings,
@@ -379,6 +432,7 @@ export class ProjectStore {
       },
       current: {
         id: current.meta.id,
+        code: current.meta.code,
         score: current.meta.score,
         risk: current.meta.risk,
         findings: current.meta.findings,
@@ -388,14 +442,26 @@ export class ProjectStore {
         score: current.meta.score - baseline.meta.score,
         findings: current.meta.findings - baseline.meta.findings,
       },
-      resolved,
+      /** Team-ready aliases */
       newFindings: neu,
+      fixed,
+      unchanged,
+      /** Legacy aliases */
+      resolved: fixed,
+      persistent: unchanged,
       changedSeverity,
-      persistent,
-      developerProgress: {
-        resolvedCount: resolved.length,
+      rows,
+      summary: {
         newCount: neu.length,
-        net: resolved.length - neu.length,
+        fixedCount: fixed.length,
+        unchangedCount: unchanged.length,
+        severityChangedCount: changedSeverity.length,
+        net: fixed.length - neu.length,
+      },
+      developerProgress: {
+        resolvedCount: fixed.length,
+        newCount: neu.length,
+        net: fixed.length - neu.length,
       },
     };
   }
@@ -477,14 +543,34 @@ function codeSortKey(code?: string): string {
   return `${m[1].toLowerCase()}-${m[2].padStart(6, '0')}`;
 }
 
+function findingFamilyKey(f: any): string {
+  const cwe = (f.mappings?.cwe || f.cwe || []).slice(0, 2).join(',') || 'none';
+  const endpoint = String(f.affectedEndpoint || f.affectedUrl || f.endpoint || '')
+    .split('?')[0]
+    .replace(/\/\d+/g, '/{id}')
+    .replace(/\/[0-9a-f]{8,}/gi, '/{id}')
+    .toLowerCase();
+  const title = String(f.title || '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/on\s+\S+/gi, 'on')
+    .replace(/via\s+.*/i, '')
+    .replace(/["'`]/g, '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 80);
+  return `${f.pluginId || 'plugin'}|${cwe}|${endpoint}|${title}`;
+}
+
 function summarizeFinding(f: any) {
   return {
     id: f.id,
     title: f.title,
     severity: f.severity,
     confidence: f.confidence,
+    status: f.status,
     endpoint: f.affectedEndpoint || f.endpoint,
     cwe: f.mappings?.cwe || f.cwe || [],
+    pluginId: f.pluginId,
   };
 }
 
