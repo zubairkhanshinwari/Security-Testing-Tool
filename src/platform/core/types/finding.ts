@@ -167,7 +167,7 @@ export interface ScanRequest {
   /** Phase 6: reuse project baseline; prioritize new endpoints + prior confirmed issues */
   incremental?: boolean;
   /** Coverage pack: quick | standard | deep | focused */
-  profile?: 'quick' | 'standard' | 'deep' | 'focused' | string;
+  profile?: 'quick' | 'standard' | 'deep' | 'openapi' | 'focused' | string;
   /** High-value routes/paths to seed discovery and prioritize probes */
   focusEndpoints?: string[];
   /** Optional OpenAPI/Swagger document URL to parse into the attack surface */

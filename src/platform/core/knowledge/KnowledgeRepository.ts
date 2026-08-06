@@ -48,6 +48,7 @@ export class KnowledgeRepository {
   private risk: RiskSummary | null = null;
   private assessmentSummary: Array<Record<string, unknown>> = [];
   private plan: Record<string, unknown> | null = null;
+  private preflight: Record<string, unknown> | null = null;
   private stage: string = 'init';
 
   constructor(
@@ -57,6 +58,14 @@ export class KnowledgeRepository {
   ) {
     this.meta = meta;
     this.bus = bus || new ScanEventBus();
+  }
+
+  setPreflight(result: Record<string, unknown>): void {
+    this.preflight = result;
+  }
+
+  getPreflight(): Record<string, unknown> | null {
+    return this.preflight;
   }
 
   get scanId(): string {
@@ -368,7 +377,11 @@ export class KnowledgeRepository {
           1,
           Math.round((finishedAt.getTime() - startedAt.getTime()) / 60000),
         ),
-        authUsed: Boolean(auth.ok && auth.ready !== false && (auth.token || auth.type === 'cookie' || auth.type === 'jwt')),
+        authUsed: Boolean(
+          auth.ok &&
+            auth.ready !== false &&
+            (auth.token || auth.type === 'cookie' || auth.type === 'jwt'),
+        ),
         loginAttempted: Boolean(request.username && request.password),
         loginSuccess: Boolean(
           auth.ok &&
@@ -378,6 +391,28 @@ export class KnowledgeRepository {
               auth.type === 'jwt' ||
               auth.type === 'discovered'),
         ),
+        /** none | failed | not-ready | ready */
+        authStatus: (() => {
+          const attempted = Boolean(request.username && request.password);
+          if (!attempted) return 'none';
+          if (!auth.ok) return 'failed';
+          if (auth.ready === false) return 'not-ready';
+          if (auth.token || auth.type === 'cookie' || auth.type === 'jwt') return 'ready';
+          return 'not-ready';
+        })(),
+        authWarning: (() => {
+          const attempted = Boolean(request.username && request.password);
+          if (!attempted) return null;
+          if (!auth.ok) return auth.message || 'Login failed — authenticated coverage limited.';
+          if (auth.ready === false) {
+            return (
+              auth.message ||
+              'Session not ready (missing token/cookie/post-login proof) — authenticated API/IDOR coverage limited.'
+            );
+          }
+          return null;
+        })(),
+        sessionProof: Array.isArray(auth.proof) ? auth.proof : [],
         authAdapter: auth.adapter || null,
         loginMessage: auth.message,
         securityTypesRequested: requestedTypes,
@@ -390,6 +425,7 @@ export class KnowledgeRepository {
         mode,
         technology: tech,
         phaseTimingsMs: phaseTimings,
+        preflight: this.preflight,
         version: this.meta.platformVersion || '2.0.0',
         platform: 'SecureAssess',
         scanId: this.scanId,

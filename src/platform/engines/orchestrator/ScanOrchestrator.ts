@@ -14,8 +14,10 @@ import type { RiskEngine } from '../risk/RiskEngine';
 import type { ReportingEngine } from '../reporting/ReportingEngine';
 import type { ProjectStore } from '../../dashboard/ProjectStore';
 import type { PluginContext } from '../../core/types/plugin';
+import type { PluginManager } from '../../plugins/PluginManager';
 import { validateTargetUrl } from '../../core/safety/targetPolicy';
 import { redactSecrets } from '../../core/safety/redact';
+import { runPreflight } from '../../core/safety/preflight';
 import { KnowledgeRepository, createScanId } from '../../core/knowledge';
 import { KnowledgeEngine } from '../knowledge/KnowledgeEngine';
 import { FingerprintEngine } from '../fingerprint/FingerprintEngine';
@@ -34,8 +36,8 @@ const nodeRequire = createRequire(__filename);
  * Owns: start/cancel/progress/failure policy and engine sequencing.
  * Incremental mode: ProjectStore baseline → planner focus (new endpoints + prior issues).
  *
- * Flow: policy → browser → discovery → fingerprint → session → surface →
- * plan → execute → verify → evidence → risk → result
+ * Flow: policy → preflight (alive + plugins) → browser → discovery → fingerprint →
+ * session → surface → plan → execute → verify → evidence → risk → result
  */
 export class ScanOrchestrator {
   private readonly knowledge = new KnowledgeEngine();
@@ -55,6 +57,7 @@ export class ScanOrchestrator {
     private readonly reporting: ReportingEngine,
     private readonly store: ProjectStore,
     private readonly config: Record<string, any>,
+    private readonly pluginManager: PluginManager,
   ) {}
 
   async run(request: ScanRequest): Promise<ScanResult> {
@@ -73,12 +76,14 @@ export class ScanOrchestrator {
       if (request.signal?.aborted) throw new Error('Scan cancelled');
     };
 
-    const { config: scanConfig, profile } = applyProfileToConfig(this.config, request.profile);
-    const userFocus = normalizeFocusEndpoints(request.targetUrl, request.focusEndpoints);
     const openApiUrl =
       request.openApiUrl && /^https?:\/\//i.test(String(request.openApiUrl))
         ? String(request.openApiUrl)
         : null;
+    const { config: scanConfig, profile } = applyProfileToConfig(this.config, request.profile, {
+      openApiUrl,
+    });
+    const userFocus = normalizeFocusEndpoints(request.targetUrl, request.focusEndpoints);
     this.logger.info('Scan profile applied', {
       profile: profile.id,
       label: profile.label,
@@ -107,9 +112,14 @@ export class ScanOrchestrator {
       repo.endStage(phase, Date.now() - t0);
     };
 
+    // ── Preflight: target alive + security plugins exist (before browser / recon) ──
     let t0 = Date.now();
-    repo.beginStage('launch', 'Launching browser');
-    progress({ stage: 'launch', message: 'Launching browser…', percent: 5 });
+    repo.beginStage('preflight', 'Preflight checks');
+    progress({
+      stage: 'preflight',
+      message: 'Preflight: checking target is alive and security plugins…',
+      percent: 3,
+    });
     this.logger.info('Security types selection', {
       scanId: repo.scanId,
       requested: requestedTypes.length,
@@ -118,6 +128,43 @@ export class ScanOrchestrator {
       mode,
       sample: requestedTypes.slice(0, 12),
     });
+
+    const preflight = await runPreflight({
+      targetUrl: request.targetUrl,
+      selectedTypes,
+      pluginIds: request.pluginIds,
+      timeoutMs: Number(this.config?.safety?.preflightTimeoutMs || 12000),
+      pluginManager: this.pluginManager,
+    });
+    repo.setPreflight(preflight as unknown as Record<string, unknown>);
+    this.logger.info('Preflight result', {
+      scanId: repo.scanId,
+      ok: preflight.ok,
+      targetAlive: preflight.targetAlive,
+      statusCode: preflight.statusCode,
+      pluginsResolved: preflight.pluginsResolved,
+      pluginsRegistered: preflight.pluginsRegistered,
+    });
+    mark('preflight', t0);
+
+    if (!preflight.ok) {
+      progress({
+        stage: 'error',
+        message: preflight.summary,
+        percent: 100,
+      });
+      throw new Error(preflight.summary);
+    }
+
+    progress({
+      stage: 'preflight',
+      message: preflight.summary,
+      percent: 6,
+    });
+
+    t0 = Date.now();
+    repo.beginStage('launch', 'Launching browser');
+    progress({ stage: 'launch', message: 'Launching browser…', percent: 8 });
     const { page, context } = await this.browserEngine.launch({ headless: true });
     mark('launch', t0);
 
@@ -125,24 +172,31 @@ export class ScanOrchestrator {
       throwIfCancelled();
       t0 = Date.now();
       repo.beginStage('recon', 'Discovery');
-      progress({
-        stage: 'recon',
-        message: `Running ${profile.label} discovery (${profileEtaLabel(profile)})…`,
-        percent: 15,
-      });
       const discoveryCfg = scanConfig.scan?.discovery || {};
       const maxLinks = Number(
         discoveryCfg.maxPagesCrawl ?? scanConfig.safety?.maxPagesCrawl ?? 8,
       );
-      // Focused profile: seed crawl heavily from operator routes; others merge as extras
+      // Focused / OpenAPI-first: seed crawl from operator routes; others merge as extras
       const seedLinks =
-        profile.id === 'focused' && userFocus.length
+        (profile.id === 'focused' || profile.id === 'openapi' || discoveryCfg.prioritizeOpenApi) &&
+        userFocus.length
           ? userFocus
           : userFocus;
+      const openApiBudget = Number(discoveryCfg.maxOpenApiPaths || 30);
+      const selectedProfileId = String(request.profile || profile.id || 'standard');
+      // Always show the profile the operator selected; mention OpenAPI mode as a discovery knobs note
+      const reconMsg = discoveryCfg.prioritizeOpenApi
+        ? `Profile ${selectedProfileId}: ${profile.label} discovery (${profileEtaLabel(profile)}) — OpenAPI priority, crawl≤${maxLinks}, API paths≤${openApiBudget}`
+        : `Profile ${selectedProfileId}: ${profile.label} discovery (${profileEtaLabel(profile)}) — crawl≤${maxLinks}, API paths≤${openApiBudget}`;
+      progress({
+        stage: 'recon',
+        message: reconMsg,
+        percent: 15,
+      });
       await this.discovery.discover(request.targetUrl, {
         maxLinks,
         parseOpenApi: discoveryCfg.parseOpenApi !== false,
-        maxOpenApiPaths: Number(discoveryCfg.maxOpenApiPaths || 30),
+        maxOpenApiPaths: openApiBudget,
         maxSitemapUrls: Number(discoveryCfg.maxSitemapUrls || 15),
         collectFormsOnCrawl: discoveryCfg.collectFormsOnCrawl !== false,
         pageSettleMs: Number(discoveryCfg.pageSettleMs || 350),
@@ -150,6 +204,7 @@ export class ScanOrchestrator {
         scriptScanLimit: Number(discoveryCfg.scriptScanLimit || 6),
         extraSeedLinks: seedLinks,
         openApiUrls: openApiUrl ? [openApiUrl] : undefined,
+        prioritizeOpenApi: Boolean(discoveryCfg.prioritizeOpenApi),
         repo,
       });
       mark('recon', t0);
@@ -172,6 +227,34 @@ export class ScanOrchestrator {
       progress({ stage: 'auth', message: 'Establishing session…', percent: 25 });
       const session = await this.sessionEngine.establish(request, repo);
       mark('auth', t0);
+
+      if (request.username && request.password) {
+        if (!session?.ok) {
+          progress({
+            stage: 'auth',
+            message: `Login failed — authenticated coverage limited (${session?.message || 'no session'})`,
+            percent: 28,
+          });
+          this.logger.warn('Credentials provided but login failed', { message: session?.message });
+        } else if (session.ready === false) {
+          progress({
+            stage: 'auth',
+            message: `Session not ready — skipping auth rediscovery (${session.message || 'no proof'})`,
+            percent: 28,
+          });
+          this.logger.warn('Login ok but session not ready', {
+            adapter: session.adapter,
+            proof: session.proof,
+            message: session.message,
+          });
+        } else {
+          progress({
+            stage: 'auth',
+            message: `Session ready via ${session.adapter || session.type || 'auth'}`,
+            percent: 28,
+          });
+        }
+      }
 
       // Phase A: authenticated second-pass discovery — only when session is ready
       if (session?.ok && session.ready !== false && discoveryCfg.authRecrawl !== false) {
@@ -444,6 +527,9 @@ export class ScanOrchestrator {
       'broken_auth',
       'sqli',
       'nosqli',
+      'weak_password',
+      'file_upload',
+      'rate_limiting',
     ]);
     const all = [...new Set([...requested, ...expanded])];
     return all.map((typeId) => {
@@ -462,13 +548,15 @@ export class ScanOrchestrator {
           (typeId === 'sqli' && /sql/i.test(f.module || f.title || '') && !/nosql/i.test(f.module || '')) ||
           (typeId === 'nosqli' && /nosql/i.test(f.module || f.title || '')),
       );
-      let status: 'executed' | 'partial' | 'queued-no-deep-scanner' = 'queued-no-deep-scanner';
-      if (plugins.length || surface) status = related.some((f) => f.issueFound) || related.length ? 'executed' : 'partial';
-      if ((plugins.length || surface) && related.length === 0) status = 'partial';
+      let status: 'executed' | 'partial' | 'unavailable' = 'unavailable';
+      if (plugins.length || surface) {
+        status = related.length ? 'executed' : 'partial';
+      }
       return {
         typeId,
         plugins,
         surfaceCheck: surface,
+        available: Boolean(plugins.length || surface),
         status,
         findingCount: related.filter((f) => f.issueFound).length,
       };
@@ -476,7 +564,13 @@ export class ScanOrchestrator {
   }
 
   private coverageFindings(
-    coverage: Array<{ typeId: string; plugins: string[]; surfaceCheck: boolean; status: string }>,
+    coverage: Array<{
+      typeId: string;
+      plugins: string[];
+      surfaceCheck: boolean;
+      status: string;
+      available?: boolean;
+    }>,
     targetUrl: string,
   ): Finding[] {
     const missingDeep = coverage.filter((c) => !c.plugins.length && !c.surfaceCheck);
@@ -489,7 +583,7 @@ export class ScanOrchestrator {
         description:
           `You selected these security types, but no deep plugin/surface module is implemented yet: ` +
           `${missingDeep.map((m) => m.typeId).join(', ')}. ` +
-          `They are recorded for coverage tracking; enable/implement plugins to execute them fully.`,
+          `They are recorded for coverage honesty only — they were not deeply probed in this run.`,
         severity: 'Informational',
         confidence: 'Informational',
         cvss: null,
@@ -498,7 +592,8 @@ export class ScanOrchestrator {
         affectedEndpoint: targetUrl,
         evidence: missingDeep.map((m) => m.typeId),
         impact: 'None directly — indicates assessment coverage gaps for selected types.',
-        remediation: 'Keep types selected for reporting, and add plugins under modules/ for full verification.',
+        remediation:
+          'Prefer “Select available scanners” in the UI, or add plugins under modules/ for full verification.',
         references: [],
         status: 'Informational',
         issueFound: false,

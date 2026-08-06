@@ -90,6 +90,99 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** CVSS may be a number or { score, vector, severity }. */
+function formatCvss(cvss) {
+  if (cvss == null || cvss === '') return 'N/A';
+  if (typeof cvss === 'number' && Number.isFinite(cvss)) return String(cvss);
+  if (typeof cvss === 'object') {
+    const score = cvss.score != null ? Number(cvss.score) : NaN;
+    const severity = cvss.severity ? String(cvss.severity) : '';
+    const vector = cvss.vector ? String(cvss.vector) : '';
+    if (Number.isFinite(score) && vector) return `${score.toFixed(1)} (${severity || '—'}) · ${vector}`;
+    if (Number.isFinite(score)) return `${score.toFixed(1)}${severity ? ` (${severity})` : ''}`;
+    if (vector) return vector;
+  }
+  const asNum = Number(cvss);
+  if (Number.isFinite(asNum)) return String(asNum);
+  const s = String(cvss);
+  return s === '[object Object]' ? 'N/A' : s;
+}
+
+function formatRemediationSteps(f) {
+  const steps = f.knowledge?.verificationSteps;
+  if (Array.isArray(steps) && steps.length) {
+    return `<ol>${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+  }
+  const param = f.parameter && f.parameter !== 'n/a' ? f.parameter : 'the affected input';
+  return `<ol>
+    <li>Locate where <code>${esc(param)}</code> is processed on the server.</li>
+    <li>Apply the developer recommendation above (typed binds / allow-lists / secure flags as applicable).</li>
+    <li>Return generic client errors; keep detail in server logs only.</li>
+    <li>Retest the same probe to confirm closure.</li>
+  </ol>`;
+}
+
+function formatReferences(f) {
+  const refs = Array.isArray(f.references) ? f.references.filter(Boolean) : [];
+  const cwes = f.cwe || f.mappings?.cwe || [];
+  if (refs.length) {
+    return `<ul>${refs
+      .slice(0, 6)
+      .map((r) => {
+        const text = String(r);
+        if (/^https?:\/\//i.test(text)) {
+          return `<li><a href="${esc(text)}">${esc(text)}</a></li>`;
+        }
+        return `<li>${esc(text)}</li>`;
+      })
+      .join('')}${cwes.length ? `<li>CWE: ${esc(cwes.join(', '))}</li>` : ''}</ul>`;
+  }
+  return `<p>${cwes.length ? `CWE: ${esc(cwes.join(', '))}` : 'See OWASP ASVS / WSTG for the mapped control family.'}</p>`;
+}
+
+function formatExpectedBehavior(f) {
+  const tech = f.knowledge?.technicalExplanation;
+  if (tech) {
+    return `Secure behavior: avoid the weakness described — ${esc(tech)} Validate inputs at the trust boundary and fail closed.`;
+  }
+  return 'Validate and authorize every untrusted input at the trust boundary; return generic errors to clients.';
+}
+
+function formatCoverageSection(meta) {
+  const rows = Array.isArray(meta.typeCoverage) ? meta.typeCoverage : [];
+  if (!rows.length) return '';
+  const implemented = rows.filter((r) => (r.plugins && r.plugins.length) || r.surfaceCheck);
+  const unavailable = rows.filter((r) => !((r.plugins && r.plugins.length) || r.surfaceCheck));
+  const body = rows
+    .slice(0, 60)
+    .map((r) => {
+      const depth =
+        r.plugins?.length ? `Plugin: ${(r.plugins || []).join(', ')}` : r.surfaceCheck ? 'Surface check' : 'No scanner yet';
+      const label = r.plugins?.length || r.surfaceCheck ? 'Available' : 'Unavailable';
+      return `<tr>
+        <td>${esc(r.typeId)}</td>
+        <td>${esc(label)}</td>
+        <td>${esc(depth)}</td>
+        <td>${esc(r.status || '—')}</td>
+        <td>${esc(r.findingCount ?? 0)}</td>
+      </tr>`;
+    })
+    .join('');
+  return `
+<section class="avoid-break" id="coverage-honesty">
+  <h3>Coverage honesty</h3>
+  <p class="muted" style="font-size:9.5pt">
+    Selected types with a deep plugin or surface check: <strong>${implemented.length}</strong>.
+    Selected without a scanner (tracked only): <strong>${unavailable.length}</strong>.
+    “Select all” in the UI does not mean every OWASP category was deeply probed.
+  </p>
+  <table>
+    <thead><tr><th>Type</th><th>Scanner</th><th>Depth</th><th>Status</th><th>Issues</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+</section>`;
+}
+
 function sevClass(sev) {
   const s = String(sev || '').toLowerCase();
   if (s === 'critical') return 'critical';
@@ -293,15 +386,21 @@ function buildHtmlReport(data = {}) {
     ? `<div class="callout-warn">Authenticated testing incomplete: protected API endpoints returned 401/403. Provide a valid username and password on the next scan so the tool can obtain a session token and validate High-severity injection issues (for example postal_code NoSQL regex).</div>`
     : '';
   const loginNote =
-    meta.loginAttempted && !meta.loginSuccess
-      ? `<div class="callout-warn">Login attempted but failed: ${esc(meta.loginMessage || 'unknown error')}. Authenticated checks may be incomplete.</div>`
-      : meta.loginSuccess
-        ? `<div class="callout-ok">Authenticated session established via login credentials.</div>`
-        : '';
+    meta.loginAttempted && meta.authStatus === 'not-ready'
+      ? `<div class="callout-warn">Login appeared to succeed but session was <strong>not ready</strong> (no token/cookie/post-login proof): ${esc(meta.loginMessage || meta.authWarning || 'session gate failed')}. Authenticated API/IDOR coverage is limited — treat “Authenticated” carefully.</div>`
+      : meta.loginAttempted && !meta.loginSuccess
+        ? `<div class="callout-warn">Login attempted but failed: ${esc(meta.loginMessage || 'unknown error')}. Authenticated checks may be incomplete.</div>`
+        : meta.loginSuccess && meta.authUsed
+          ? `<div class="callout-ok">Authenticated session ready${meta.authAdapter ? ` via <strong>${esc(meta.authAdapter)}</strong>` : ''}${Array.isArray(meta.sessionProof) && meta.sessionProof.length ? ` (proof: ${esc(meta.sessionProof.join(', '))})` : ''}.</div>`
+          : '';
+  const profileNote = meta.scanProfile
+    ? `<div class="callout-ok" style="background:#f8fafc;border-color:#cbd5e1;color:#334155">Scan profile: <strong>${esc(meta.scanProfile)}</strong>. Quick/Standard are grey-box passes — use Deep or Focused + dual-account for stronger API/BOLA coverage. This score reflects this run’s depth, not “complete security.”</div>`
+    : '';
   const typesList =
     Array.isArray(meta.securityTypes) && meta.securityTypes.length
       ? meta.securityTypes.join(', ')
       : 'Recommended defaults';
+  const coverageSection = formatCoverageSection(meta);
 
   const findingRows = findings
     .map((f) => {
@@ -376,7 +475,7 @@ function buildHtmlReport(data = {}) {
             <tr><td>Confidence</td><td>${esc(f.confidence)}</td></tr>
             <tr><td>CWE Mapping</td><td>${esc((f.cwe || []).join(', ') || 'N/A')}</td></tr>
             <tr><td>OWASP Category</td><td>${esc(f.owasp)}</td></tr>
-            <tr><td>CVSS Score</td><td>${esc(f.cvss ?? 'N/A')}</td></tr>
+            <tr><td>CVSS Score</td><td>${esc(formatCvss(f.cvss))}</td></tr>
           </table>
           <h4>Business Impact</h4>
           <p class="business-impact">${esc(
@@ -389,7 +488,7 @@ function buildHtmlReport(data = {}) {
           <h4>Description</h4>
           <p>${esc(f.description)}</p>
           <h4>Expected Secure Behavior</h4>
-          <p>User input should be strictly validated and bound via parameterized queries / typed ODM filters. Errors should be generic.</p>
+          <p>${formatExpectedBehavior(f)}</p>
           <h4>Observed Result</h4>
           <p>${esc(f.description)}</p>
           <h4>Evidence</h4>
@@ -398,19 +497,23 @@ function buildHtmlReport(data = {}) {
             <tbody>${ev || '<tr><td colspan="6">No probe rows captured</td></tr>'}</tbody>
           </table>
           <h4>Developer Recommendation</h4>
-          <p>Use parameterized queries / prepared statements (SQL) or typed exact-match ODM queries (NoSQL). Validate allow-lists at the boundary. Never concatenate untrusted input into queries or regex sources.</p>
+          <p>${esc(
+            f.remediation ||
+              (Array.isArray(f.knowledge?.secureCodingExamples) && f.knowledge.secureCodingExamples[0]) ||
+              'Follow OWASP guidance for this control family; prefer secure defaults and deny-by-default authorization.',
+          )}</p>
+          ${
+            Array.isArray(f.knowledge?.secureCodingExamples) && f.knowledge.secureCodingExamples.length
+              ? `<h4>Secure coding examples</h4><ul>${f.knowledge.secureCodingExamples
+                  .slice(0, 4)
+                  .map((ex) => `<li><code>${esc(ex)}</code></li>`)
+                  .join('')}</ul>`
+              : ''
+          }
           <h4>Remediation Steps</h4>
-          <ol>
-            <li>Identify the query construction path for <code>${esc(f.parameter)}</code>.</li>
-            <li>Replace dynamic concatenation with parameterized / typed bindings.</li>
-            <li>Add allow-list validation for the parameter type.</li>
-            <li>Return generic errors to clients; log details server-side.</li>
-            <li>Retest with the same probes to confirm closure.</li>
-          </ol>
+          ${formatRemediationSteps(f)}
           <h4>References</h4>
-          <p>OWASP WSTG-INPV-05; OWASP SQL Injection Prevention Cheat Sheet; ${(f.cwe || [])
-            .map((c) => esc(c))
-            .join(', ') || 'CWE-89'}.</p>
+          ${formatReferences(f)}
           ${
             (() => {
               if (!['Critical', 'High', 'Medium', 'Low'].includes(sev)) return '';
@@ -651,6 +754,7 @@ function buildHtmlReport(data = {}) {
   <h2>1. Executive Summary</h2>
   ${authGapCallout}
   ${loginNote}
+  ${profileNote}
   <div class="callout-ok">${esc(sqliNone)}</div>
   <table class="meta-table">
     <tr><td>Project Name</td><td>${esc(meta.projectName)}</td></tr>
@@ -659,8 +763,15 @@ function buildHtmlReport(data = {}) {
     <tr><td>Assessment Date</td><td>${esc(meta.startedAt.slice(0, 10))}</td></tr>
     <tr><td>Assessment Duration</td><td>${meta.durationMinutes} minute(s)</td></tr>
     <tr><td>Assessment Type</td><td>${esc(meta.assessmentType || 'Web Security Assessment')}</td></tr>
+    <tr><td>Scan profile</td><td>${esc(meta.scanProfile || 'standard')}</td></tr>
     <tr><td>Security Testing Types</td><td>${esc(typesList)}</td></tr>
-    <tr><td>Authenticated</td><td>${meta.authUsed ? 'Yes' : 'No'}${meta.loginSuccess ? ' (via username/password)' : ''}</td></tr>
+    <tr><td>Authenticated</td><td>${
+      meta.authUsed
+        ? `Yes — session ready${meta.authAdapter ? ` (${esc(meta.authAdapter)})` : ''}`
+        : meta.loginAttempted
+          ? `No — ${esc(meta.authStatus || 'login failed or not ready')}`
+          : 'No'
+    }</td></tr>
     <tr><td>Modules Tested</td><td>${stats.modulesTested}</td></tr>
     <tr><td>Endpoints Tested</td><td>${stats.endpointsTested}</td></tr>
     <tr><td>Parameters Tested</td><td>${stats.parametersTested}</td></tr>
@@ -696,6 +807,7 @@ function buildHtmlReport(data = {}) {
     <li>Query surfaces: ${recon.querySurfaces}</li>
   </ul>
   <p><strong>Safety controls:</strong> non-destructive probes only; no database dumps; no intentional data modification; time-based delays limited.</p>
+  ${coverageSection}
 </section>
 
 <section class="page-break" id="methodology">
@@ -846,4 +958,4 @@ function buildHtmlReport(data = {}) {
 </html>`;
 }
 
-module.exports = { buildHtmlReport };
+module.exports = { buildHtmlReport, formatCvss, formatReferences, resolveBusinessImpact };

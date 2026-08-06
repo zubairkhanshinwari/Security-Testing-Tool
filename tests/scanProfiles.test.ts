@@ -7,11 +7,23 @@ import {
 } from '../src/platform/core/config/scanProfiles';
 
 describe('scanProfiles', () => {
-  it('resolves quick/standard/deep/focused', () => {
+  it('resolves quick/standard/deep/openapi/focused', () => {
     expect(resolveScanProfile('quick').discovery.maxPagesCrawl).toBe(4);
     expect(resolveScanProfile('deep').discovery.maxPagesCrawl).toBe(16);
+    expect(resolveScanProfile('openapi').discovery.prioritizeOpenApi).toBe(true);
+    expect(resolveScanProfile('openapi').discovery.maxOpenApiPaths).toBe(120);
     expect(resolveScanProfile('focused').discovery.prioritizeFocusSeeds).toBe(true);
     expect(resolveScanProfile('nope').id).toBe('standard');
+  });
+
+  it('boosts deep OpenAPI knobs when openApiUrl is set (keeps deep id)', () => {
+    const { profile } = applyProfileToConfig({}, 'deep', {
+      openApiUrl: 'https://dev.example.com/openapi.json',
+    });
+    expect(profile.id).toBe('deep');
+    expect(profile.label).toBe('Deep');
+    expect(profile.discovery.prioritizeOpenApi).toBe(true);
+    expect(profile.discovery.maxOpenApiPaths).toBeGreaterThanOrEqual(120);
   });
 
   it('exposes ETA labels', () => {

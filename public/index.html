@@ -118,6 +118,9 @@
       display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
       color: #065f46; background: #d1fae5; border-radius: 999px; padding: 1px 6px;
     }
+    .type-item .tag.avail { color: #1e3a8a; background: #dbeafe; }
+    .type-item .tag.unavail { color: #475569; background: #e2e8f0; }
+    .type-item.unavailable { opacity: 0.75; }
     .group-title {
       font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
       color: var(--muted); font-weight: 700; margin: 10px 8px 4px;
@@ -191,6 +194,7 @@
               <option value="quick">Quick — smoke / CI (~2–4 min)</option>
               <option value="standard" selected>Standard — balanced (~4–10 min)</option>
               <option value="deep">Deep — broader crawl (~15–35 min)</option>
+              <option value="openapi">OpenAPI-first — API-heavy apps (~8–25 min)</option>
               <option value="focused">Focused — your routes / OpenAPI (~3–12 min)</option>
             </select>
             <p class="hint" id="profileHint">
@@ -245,22 +249,25 @@
           </div>
         </div>
         <div class="auth-box">
-          <strong>Account A</strong> authenticates the primary crawl and probes.
-          Add <strong>Account B</strong> (same role preferred) to confirm IDOR/BOLA: Account B’s session is used against
-          object URLs discovered under Account A. Login uses discovered auth APIs or the UI form.
+          <strong>Account A</strong> authenticates the primary crawl and probes — the scan reports
+          <em>session ready</em> only after token/cookie/post-login proof (not just a form submit).
+          Add <strong>Account B</strong> (same role preferred) to confirm IDOR/BOLA.
+          If login fails or session is not ready, authenticated API coverage is limited and the report will warn you.
         </div>
 
         <div class="sec-head">
           <h3>Type of Security Testing</h3>
           <div class="sec-actions">
             <button type="button" id="btnRecommended" class="primary">Select recommended</button>
-            <button type="button" id="btnAll">Select all</button>
+            <button type="button" id="btnAvailable">Select available scanners</button>
+            <button type="button" id="btnAll">Select all catalog</button>
             <button type="button" id="btnNone">Clear</button>
           </div>
         </div>
         <p class="hint">
-          Recommended types (green) are pre-selected for typical websites — OWASP Top 10 aligned.
-          Use <strong>Select all</strong> to include every security testing type (not only recommended).
+          <strong>Available scanner</strong> = deep plugin or surface check exists.
+          <strong>No scanner yet</strong> = catalog label only (not deeply probed).
+          Prefer <em>Select available scanners</em>; “Select all catalog” overpromises if you assume full coverage.
         </p>
         <p class="hint" id="selectedCount" style="font-weight:700;color:var(--navy)">0 of 0 security types selected</p>
         <div id="typesBox" class="types">Loading security testing types…</div>
@@ -350,6 +357,13 @@
       clearActiveJob();
     }
 
+    function escAttr(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
     function selectedTypes() {
       return [...typesBox.querySelectorAll('input[type=checkbox][data-id]:checked')].map((el) => el.dataset.id);
     }
@@ -388,15 +402,25 @@
     }
 
     function updateSelectedCount() {
-      const n = selectedTypes().length;
+      const selected = selectedTypes();
+      const n = selected.length;
       const total = catalog.length || typesBox.querySelectorAll('input[type=checkbox][data-id]').length;
       const el = document.getElementById('selectedCount');
       if (!el) return;
+      const implemented = catalog.filter((t) => t.coverage !== 'unavailable').length;
+      const selectedUnavail = selected.filter((id) => {
+        const t = catalog.find((x) => x.id === id);
+        return t && t.coverage === 'unavailable';
+      }).length;
       const mode =
-        total && n >= total ? ' (ALL types)' :
-        n && catalog.length && n === catalog.filter((t) => t.recommended).length ? ' (recommended set)' :
-        '';
-      el.textContent = `${n} of ${total} security types selected${mode}`;
+        total && n >= total ? ' (entire catalog)' :
+        n && catalog.length && n === catalog.filter((t) => t.recommended && t.coverage !== 'unavailable').length
+          ? ' (recommended available)'
+          : n && n === implemented ? ' (all available scanners)' : '';
+      el.textContent =
+        `${n} of ${total} selected · ${implemented} types have scanners` +
+        (selectedUnavail ? ` · ${selectedUnavail} without scanner (tracking only)` : '') +
+        mode;
     }
 
     function setChecked(predicate) {
@@ -426,12 +450,16 @@
       typesBox.innerHTML = Object.entries(groups).map(([group, items]) => {
         return `<div class="group-title">${group}</div>` + items.map((t) => {
           const checked = useSaved ? savedSet.has(t.id) : !!t.recommended;
+          const avail = t.coverage !== 'unavailable';
+          const covTag = avail
+            ? '<span class="tag avail">Available scanner</span>'
+            : '<span class="tag unavail">No scanner yet</span>';
           return `
-          <label class="type-item ${t.recommended ? 'recommended' : ''} ${checked ? 'is-checked' : ''}">
-            <input type="checkbox" data-id="${t.id}" ${checked ? 'checked' : ''} />
+          <label class="type-item ${t.recommended ? 'recommended' : ''} ${checked ? 'is-checked' : ''} ${avail ? '' : 'unavailable'}" data-coverage="${escAttr(t.coverage || 'implemented')}">
+            <input type="checkbox" data-id="${t.id}" data-coverage="${escAttr(t.coverage || 'implemented')}" ${checked ? 'checked' : ''} />
             <span>
-              <span class="name">${t.name}${t.recommended ? '<span class="tag">Recommended</span>' : ''}</span>
-              <div class="desc">${t.description} <em>Ex: ${t.example}</em></div>
+              <span class="name">${t.name}${t.recommended ? '<span class="tag">Recommended</span>' : ''}${covTag}</span>
+              <div class="desc">${t.description} <em>Ex: ${t.example}</em>${avail ? '' : ' — selected for tracking only; not deeply probed.'}</div>
             </span>
           </label>`;
         }).join('');
@@ -458,17 +486,25 @@
     }
 
     const btnRecommended = document.getElementById('btnRecommended');
+    const btnAvailable = document.getElementById('btnAvailable');
     const btnAll = document.getElementById('btnAll');
     const btnNone = document.getElementById('btnNone');
-    btnRecommended.onclick = () => setChecked((t) => !!t?.recommended);
+    btnRecommended.onclick = () => setChecked((t) => !!t?.recommended && t?.coverage !== 'unavailable');
+    btnAvailable.onclick = () => setChecked((t) => t?.coverage !== 'unavailable');
     btnAll.onclick = () => {
       const allIds = [...typesBox.querySelectorAll('input[type=checkbox][data-id]')].map((el) => el.dataset.id);
       applySelection(allIds);
+      const unavail = catalog.filter((t) => t.coverage === 'unavailable').length;
+      if (unavail) {
+        document.getElementById('selectedCount').textContent +=
+          ` · warning: ${unavail} catalog types have no deep scanner`;
+      }
     };
     btnNone.onclick = () => setChecked(() => false);
 
     function setTypeControlsDisabled(disabled) {
       btnRecommended.disabled = disabled;
+      if (btnAvailable) btnAvailable.disabled = disabled;
       btnAll.disabled = disabled;
       btnNone.disabled = disabled;
       if (disabled) {
@@ -618,10 +654,11 @@
       const hint = document.getElementById('profileHint');
       if (!sel || !hint) return;
       const tips = {
-        quick: 'Quick (~2–4 min): shallow crawl for smoke/CI. Low coverage by design.',
-        standard: 'Standard (~4–10 min): balanced default. Good for most assessments.',
-        deep: 'Deep (~15–35 min): broader crawl/OpenAPI. Still may miss obscure routes — add Focus routes for critical modules.',
-        focused: 'Focused (~3–12 min): spends budget on Focus routes + OpenAPI URL. Shallow site-wide crawl.',
+        quick: 'Quick (~2–4 min): smoke/CI only — not a full assessment. Score reflects shallow depth.',
+        standard: 'Standard (~4–10 min): balanced grey-box pass — NOT complete coverage. Use Deep/OpenAPI-first/Focused + Account B for stronger API/BOLA.',
+        deep: 'Deep (~15–35 min): broader crawl/OpenAPI. If you also set an OpenAPI URL, discovery auto-shifts OpenAPI-first.',
+        openapi: 'OpenAPI-first (~8–25 min): best for API-heavy apps (Falaya-style). Set OpenAPI/Swagger URL; shallow HTML crawl, large API path budget.',
+        focused: 'Focused (~3–12 min): spends budget on Focus routes + OpenAPI. Best when you know high-value paths; shallow site-wide crawl.',
       };
       const sync = () => { hint.textContent = tips[sel.value] || tips.standard; };
       sel.addEventListener('change', sync);
@@ -647,7 +684,7 @@
 
       persistSelection(types);
       startBtn.disabled = true;
-      startBtn.textContent = 'Scanning…';
+      startBtn.textContent = 'Preflight…';
       setTypeControlsDisabled(true);
 
       const payload = {
@@ -667,9 +704,25 @@
         authorized: true,
       };
       document.getElementById('msgText').textContent =
-        `Starting with ${types.length} selected security type(s)${types.length >= catalog.length ? ' (ALL)' : ''}…`;
+        'Preflight: checking target reachability (HTTP/TCP — not ping) and security plugins…';
+      statusBox.classList.add('show');
 
       try {
+        const preRes = await fetch('/api/preflight', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            targetUrl: payload.targetUrl,
+            securityTypes: types,
+          }),
+        });
+        const pre = await preRes.json();
+        if (!pre.ok) {
+          throw new Error(pre.summary || pre.error || 'Preflight failed — target down or no plugins');
+        }
+        document.getElementById('msgText').textContent = pre.summary || 'Preflight OK — starting scan…';
+        startBtn.textContent = 'Scanning…';
+
         const res = await fetch('/api/scan', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },

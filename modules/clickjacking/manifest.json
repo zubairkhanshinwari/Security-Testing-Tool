@@ -1,0 +1,14 @@
+{
+  "id": "clickjacking",
+  "name": "Clickjacking / Frame Protection",
+  "version": "1.0.0",
+  "description": "Safe clickjacking checks: X-Frame-Options and CSP frame-ancestors on key pages. Passive header review only — no UI redressing exploits.",
+  "category": "Config",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["clickjacking", "http_headers", "security_misconfig", "owasp_top10"],
+  "owasp": ["A05:2021-Security Misconfiguration"],
+  "cwe": ["CWE-1021", "CWE-693"],
+  "modes": ["passive", "active-safe"],
+  "tags": ["clickjacking", "x-frame-options", "csp", "frame-ancestors", "safe", "passive"]
+}

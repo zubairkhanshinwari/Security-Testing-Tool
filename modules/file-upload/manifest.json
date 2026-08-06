@@ -1,0 +1,14 @@
+{
+  "id": "file-upload",
+  "name": "File Upload (Safe Review)",
+  "version": "1.0.0",
+  "description": "Non-destructive discovery of file upload surfaces and missing client-side constraints (accept/size). Does not upload malware or shells.",
+  "category": "API",
+  "enabledByDefault": true,
+  "recommended": false,
+  "securityTypeIds": ["file_upload"],
+  "owasp": ["A04:2021-Insecure Design"],
+  "cwe": ["CWE-434"],
+  "modes": ["passive", "active-safe"],
+  "tags": ["upload", "safe"]
+}

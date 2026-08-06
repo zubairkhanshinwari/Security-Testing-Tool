@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import { bootstrap } from '../bootstrap';
 import { JobController } from '../engines/jobs/JobController';
 import { validateTargetUrl } from '../core/safety/targetPolicy';
+import { runPreflight } from '../core/safety/preflight';
 import { redactSecrets } from '../core/safety/redact';
 
 const nodeRequire = createRequire(__filename);
@@ -44,6 +45,41 @@ async function main() {
     }
   }
 
+  /**
+   * Pre-recon gate: target alive + matching security plugins exist.
+   * UI/CLI should call this (or rely on orchestrator which runs the same checks).
+   */
+  app.post('/api/preflight', async (req, res) => {
+    const { targetUrl, securityTypes, pluginIds } = req.body || {};
+    if (!targetUrl || !isHttpUrl(String(targetUrl))) {
+      return res.status(400).json({ ok: false, error: 'A valid http(s) target URL is required.' });
+    }
+    const policy = validateTargetUrl(String(targetUrl));
+    if (!policy.ok) {
+      return res.status(400).json({ ok: false, error: policy.reason, code: 'TARGET_POLICY' });
+    }
+    const { expandSecurityTypes, DEFAULT_SELECTED } = nodeRequire(
+      path.join(root, 'src', 'scanner', 'securityTypes.js'),
+    );
+    const requested =
+      Array.isArray(securityTypes) && securityTypes.length
+        ? [...new Set(securityTypes)]
+        : [...DEFAULT_SELECTED];
+    const selectedTypes = expandSecurityTypes(requested);
+    try {
+      const result = await runPreflight({
+        targetUrl: String(targetUrl),
+        selectedTypes,
+        pluginIds: Array.isArray(pluginIds) ? pluginIds : undefined,
+        timeoutMs: Number(config?.safety?.preflightTimeoutMs || 12000),
+        pluginManager,
+      });
+      return res.status(result.ok ? 200 : 422).json(result);
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, error: err?.message || 'Preflight failed' });
+    }
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({
       ok: true,
@@ -74,7 +110,39 @@ async function main() {
       root,
       'src/scanner/securityTypes.js',
     ));
-    res.json({ types: SECURITY_TYPES, defaultSelected: DEFAULT_SELECTED });
+    /** Types with a deep plugin and/or residual surface check — honest “available” set. */
+    const SURFACE_OR_OWNED = new Set([
+      'sqli', 'nosqli', 'http_headers', 'cors', 'info_disclosure', 'clickjacking',
+      'security_misconfig', 'xss', 'idor', 'bac', 'api_security', 'jwt', 'csrf', 'ssrf',
+      'open_redirect', 'ssti', 'lfi', 'path_traversal', 'cookie_security', 'session_mgmt',
+      'broken_auth', 'rate_limiting', 'weak_password', 'file_upload', 'sensitive_data', 'owasp_top10',
+    ]);
+    const manifests = pluginManager.list().map((p) => p.manifest);
+    const pluginByType = new Map<string, string[]>();
+    for (const m of manifests) {
+      for (const id of m.securityTypeIds || []) {
+        const list = pluginByType.get(id) || [];
+        list.push(m.id);
+        pluginByType.set(id, list);
+      }
+    }
+    const types = (SECURITY_TYPES || []).map((t: any) => {
+      const plugins = pluginByType.get(t.id) || [];
+      const available = plugins.length > 0 || SURFACE_OR_OWNED.has(t.id);
+      return {
+        ...t,
+        coverage: available ? 'implemented' : 'unavailable',
+        plugins,
+      };
+    });
+    const implementedCount = types.filter((t: any) => t.coverage === 'implemented').length;
+    res.json({
+      types,
+      defaultSelected: DEFAULT_SELECTED,
+      implementedCount,
+      catalogCount: types.length,
+      note: 'Only coverage=implemented types have a deep plugin or surface check. Others are catalog labels only.',
+    });
   });
 
   app.get('/api/plugins', (_req, res) => {

@@ -150,6 +150,44 @@ const STANDARD_LIBRARY = {
       severity: 'Medium',
     },
   },
+  'weak-password': {
+    cwe: ['CWE-521'],
+    owaspTop10: ['A07:2021-Identification and Authentication Failures'],
+    owaspAsvs: ['V2.1.1'],
+    defaultCvss: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N',
+      score: 5.3,
+      severity: 'Medium',
+    },
+  },
+  'file-upload': {
+    cwe: ['CWE-434'],
+    owaspTop10: ['A04:2021-Insecure Design'],
+    defaultCvss: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N',
+      score: 5.3,
+      severity: 'Medium',
+    },
+  },
+  'rate-limiting': {
+    cwe: ['CWE-307'],
+    owaspTop10: ['A07:2021-Identification and Authentication Failures'],
+    defaultCvss: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N',
+      score: 5.3,
+      severity: 'Medium',
+    },
+  },
+  clickjacking: {
+    cwe: ['CWE-1021', 'CWE-693'],
+    owaspTop10: ['A05:2021-Security Misconfiguration'],
+    owaspAsvs: ['V14.4.3'],
+    defaultCvss: {
+      vector: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:A/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N',
+      score: 5.1,
+      severity: 'Medium',
+    },
+  },
 };
 
 function mappingsFor(key) {

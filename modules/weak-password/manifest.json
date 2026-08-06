@@ -1,0 +1,14 @@
+{
+  "id": "weak-password",
+  "name": "Weak Password Policy",
+  "version": "1.0.0",
+  "description": "Safe review of password field policy signals (minlength, pattern, autocomplete) on login/signup forms. Does not brute-force accounts.",
+  "category": "Auth",
+  "enabledByDefault": true,
+  "recommended": false,
+  "securityTypeIds": ["weak_password", "broken_auth"],
+  "owasp": ["A07:2021-Identification and Authentication Failures"],
+  "cwe": ["CWE-521"],
+  "modes": ["passive", "active-safe"],
+  "tags": ["password", "policy", "safe"]
+}

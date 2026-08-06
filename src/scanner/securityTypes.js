@@ -26,8 +26,8 @@ const SECURITY_TYPES = [
   { id: 'ssrf', name: 'Server-Side Request Forgery (SSRF)', description: 'Force server to make internal requests.', example: 'Cloud metadata access', recommended: true, group: 'API' },
   { id: 'rce', name: 'Remote Code Execution (RCE)', description: 'Execute arbitrary code on the server.', example: 'Malicious upload', recommended: false, group: 'API' },
   { id: 'file_upload', name: 'File Upload Vulnerability', description: 'Upload malicious files.', example: 'PHP web shell', recommended: false, group: 'API' },
-  { id: 'path_traversal', name: 'Path Traversal', description: 'Access restricted files/directories.', example: '../../../etc/passwd', recommended: false, group: 'API' },
-  { id: 'lfi', name: 'Local File Inclusion (LFI)', description: 'Include local files on the server.', example: 'Read config files', recommended: false, group: 'API' },
+  { id: 'path_traversal', name: 'Path Traversal', description: 'Access restricted files/directories.', example: '../../../etc/passwd', recommended: true, group: 'API' },
+  { id: 'lfi', name: 'Local File Inclusion (LFI)', description: 'Include local files on the server.', example: 'Read config files', recommended: true, group: 'API' },
   { id: 'rfi', name: 'Remote File Inclusion (RFI)', description: 'Include remote malicious files.', example: 'Execute external code', recommended: false, group: 'API' },
 
   { id: 'security_misconfig', name: 'Security Misconfiguration', description: 'Insecure server/app settings.', example: 'Directory listing enabled', recommended: true, group: 'Config' },
@@ -38,7 +38,7 @@ const SECURITY_TYPES = [
   { id: 'crypto', name: 'Cryptographic Testing', description: 'Encryption algorithms and key management.', example: 'MD5 password hashing', recommended: false, group: 'Config' },
 
   { id: 'open_redirect', name: 'Open Redirect', description: 'Redirect users to malicious sites.', example: 'redirect=https://evil.com', recommended: true, group: 'Other' },
-  { id: 'clickjacking', name: 'Clickjacking', description: 'Trick users into clicking hidden elements.', example: 'Hidden iframe', recommended: false, group: 'Other' },
+  { id: 'clickjacking', name: 'Clickjacking', description: 'Detect missing X-Frame-Options / CSP frame-ancestors (UI redressing).', example: 'Page embeddable in iframe', recommended: true, group: 'Other' },
   { id: 'rate_limiting', name: 'Rate Limiting Testing', description: 'Brute-force / abuse protection.', example: 'Unlimited login attempts', recommended: true, group: 'Other' },
   { id: 'business_logic', name: 'Business Logic Testing', description: 'Flaws in workflows.', example: 'Reuse coupon', recommended: false, group: 'Other' },
   { id: 'race', name: 'Race Condition Testing', description: 'Simultaneous requests.', example: 'Double payment', recommended: false, group: 'Other' },
@@ -62,6 +62,8 @@ function expandSecurityTypes(selected = []) {
       'sqli',
       'nosqli',
       'command_injection',
+      'lfi',
+      'path_traversal',
       'security_misconfig',
       'broken_auth',
       'ssrf',
@@ -73,6 +75,7 @@ function expandSecurityTypes(selected = []) {
       'idor',
       'xss',
       'csrf',
+      'clickjacking',
     ].forEach((id) => set.add(id));
   }
   return [...set];

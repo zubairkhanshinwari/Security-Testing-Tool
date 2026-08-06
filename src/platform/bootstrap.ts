@@ -90,6 +90,7 @@ export async function bootstrap(rootDir = process.cwd()) {
     reporting,
     store,
     config as any,
+    pluginManager,
   );
   container.registerValue(TOKENS.ScanOrchestrator, orchestrator);
 

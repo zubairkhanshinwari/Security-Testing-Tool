@@ -1,4 +1,4 @@
-export type ScanProfileId = 'quick' | 'standard' | 'deep' | 'focused';
+export type ScanProfileId = 'quick' | 'standard' | 'deep' | 'focused' | 'openapi';
 
 export interface ScanProfileOverrides {
   id: ScanProfileId;
@@ -17,6 +17,8 @@ export interface ScanProfileOverrides {
     homeSettleMs: number;
     /** Prefer user/OpenAPI seeds over broad crawl */
     prioritizeFocusSeeds?: boolean;
+    /** Prefer OpenAPI-derived endpoints for API-heavy apps */
+    prioritizeOpenApi?: boolean;
   };
   safety: {
     requestTimeoutMs: number;
@@ -77,6 +79,26 @@ export const SCAN_PROFILES: Record<ScanProfileId, ScanProfileOverrides> = {
     },
     safety: { requestTimeoutMs: 15000, maxConcurrentProbes: 4 },
   },
+  openapi: {
+    id: 'openapi',
+    label: 'OpenAPI-first',
+    description:
+      'API-heavy apps (e.g. Falaya): prioritize OpenAPI/Swagger paths, shallow HTML crawl. Provide OpenAPI URL when possible.',
+    etaMinutes: { min: 8, max: 25 },
+    discovery: {
+      maxPagesCrawl: 4,
+      maxOpenApiPaths: 120,
+      maxSitemapUrls: 8,
+      authMaxPagesCrawl: 4,
+      authRecrawl: true,
+      scriptScanLimit: 6,
+      pageSettleMs: 350,
+      homeSettleMs: 700,
+      prioritizeFocusSeeds: true,
+      prioritizeOpenApi: true,
+    },
+    safety: { requestTimeoutMs: 12000, maxConcurrentProbes: 5 },
+  },
   focused: {
     id: 'focused',
     label: 'Focused',
@@ -112,8 +134,25 @@ export function profileEtaLabel(profile: ScanProfileOverrides): string {
 export function applyProfileToConfig(
   config: Record<string, any>,
   profileId?: string | null,
+  opts?: { openApiUrl?: string | null },
 ): { config: Record<string, any>; profile: ScanProfileOverrides } {
-  const profile = resolveScanProfile(profileId);
+  let profile = resolveScanProfile(profileId);
+  // Deep + explicit OpenAPI URL → boost OpenAPI path budget (keep profile id = deep)
+  if (profile.id === 'deep' && opts?.openApiUrl) {
+    const oapi = SCAN_PROFILES.openapi;
+    profile = {
+      ...profile,
+      label: 'Deep',
+      description: `${profile.description} OpenAPI URL detected — prioritizing API paths within Deep.`,
+      discovery: {
+        ...profile.discovery,
+        maxOpenApiPaths: Math.max(profile.discovery.maxOpenApiPaths, oapi.discovery.maxOpenApiPaths),
+        maxPagesCrawl: Math.min(profile.discovery.maxPagesCrawl, 8),
+        prioritizeFocusSeeds: true,
+        prioritizeOpenApi: true,
+      },
+    };
+  }
   const next = {
     ...config,
     safety: { ...(config.safety || {}), ...profile.safety },

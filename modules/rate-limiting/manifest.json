@@ -1,0 +1,14 @@
+{
+  "id": "rate-limiting",
+  "name": "Rate Limiting (Safe Probe)",
+  "version": "1.0.0",
+  "description": "Small bounded probes for missing rate limits on login/auth endpoints. Caps attempts — not a DoS test.",
+  "category": "Other",
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["rate_limiting", "broken_auth", "owasp_top10"],
+  "owasp": ["A07:2021-Identification and Authentication Failures"],
+  "cwe": ["CWE-307"],
+  "modes": ["active-safe", "authenticated"],
+  "tags": ["rate-limit", "auth", "safe"]
+}

@@ -28,11 +28,13 @@ export const PLUGIN_OWNED_TYPES = new Set([
   'cookie_security',
   'session_mgmt',
   'broken_auth',
+  'weak_password',
+  'file_upload',
+  'rate_limiting',
 ]);
 
 /** Deep residual types that stay in surfaceChecks even when OWASP expands the set. */
 const DEEP_SURFACE_TYPES = [
-  'rate_limiting',
   'sensitive_data',
 ];
 
@@ -275,7 +277,7 @@ export class ScanPlanningEngine {
     const id = plugin.manifest.id;
     // Retest plugins from prior confirmed findings run first in incremental mode
     if (retest) return 5;
-    if (id === 'security-headers' || id === 'cors' || id === 'info-disclosure') return 10;
+    if (id === 'security-headers' || id === 'cors' || id === 'info-disclosure' || id === 'clickjacking') return 10;
     if (['xss', 'idor-bac', 'open-redirect', 'ssrf', 'ssti', 'lfi'].includes(id)) return 20;
     if (['jwt', 'csrf', 'cookie-security', 'session-mgmt'].includes(id)) return 25;
     if (id === 'sql-injection' || id === 'nosql-injection') return 40;
@@ -289,6 +291,7 @@ export class ScanPlanningEngine {
         'security-headers',
         'cors',
         'info-disclosure',
+        'clickjacking',
         'xss',
         'idor-bac',
         'open-redirect',
@@ -351,18 +354,8 @@ export class ScanPlanningEngine {
       void hasJwtHint;
     }
 
-    // Skip LFI when no file-like parameters and no file/download endpoints
-    if (pluginId === 'lfi') {
-      const fileParams = (surface.parameters || []).some((p) =>
-        /file|path|page|template|doc|include|view/i.test(p.name),
-      );
-      const fileEps = (surface.endpoints || []).some((e) =>
-        /file|download|export|include|static/i.test(e.url),
-      );
-      if (!fileParams && !fileEps && !(surface.parameters || []).length) {
-        return 'no file-like parameters or download endpoints';
-      }
-    }
+    // LFI plugin seeds common file/path/page params itself — do not skip lightly.
+    // Only skip in passive mode (handled via PASSIVE_BLOCKED_PLUGINS).
 
     return null;
   }

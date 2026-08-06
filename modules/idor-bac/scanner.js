@@ -8,11 +8,25 @@ const { gradeFromSignals, evidenceWithSignals } = require(path.join(
   'src/platform/plugins/confirmationSignals.js',
 ));
 
+/**
+ * Safe, non-destructive IDOR / BOLA checks (GET-only).
+ * Prefer dual-account (Account B) confirmation; otherwise use horizontal ID mutation + negative controls.
+ */
+
 const SENSITIVE_JSON_RE =
-  /("(email|phone|password|role|ssn|address|dob|dateOfBirth|creditCard|accountNumber|secret|apiKey|privateKey)"\s*:)/i;
+  /("(email|phone|password|role|ssn|address|dob|dateOfBirth|creditCard|accountNumber|secret|apiKey|privateKey|username|fullName|firstName|lastName|mobile|iban)"\s*:)/i;
+
+const IDENTITY_RE =
+  /"(email|userId|user_id|accountId|account_id|username|phone|mobile)"\s*:\s*"?([^",}\s]+)/gi;
 
 const OBJECT_PATH_RE =
-  /\/(users?|accounts?|profiles?|orders?|invoices?|documents?|files?|listings?|properties|items?|customers?)\/([^/?#]+)/i;
+  /\/(users?|accounts?|profiles?|orders?|invoices?|documents?|files?|listings?|properties|items?|customers?|tickets?|messages?|bookings?|payments?|transactions?|carts?|members?|tenants?|orgs?|organizations?|projects?|reports?|records?|resources?)\/([^/?#]+)/i;
+
+const ID_PARAMS =
+  /^(id|user[_-]?id|account[_-]?id|order[_-]?id|doc[_-]?id|document[_-]?id|file[_-]?id|customer[_-]?id|invoice[_-]?id|ticket[_-]?id|project[_-]?id|org[_-]?id|member[_-]?id|uuid|object[_-]?id|resource[_-]?id|entity[_-]?id|record[_-]?id)$/i;
+
+const MAX_TARGETS = 24;
+const MAX_SCAN = 16;
 
 function createPlugin(manifest) {
   return {
@@ -23,35 +37,58 @@ function createPlugin(manifest) {
       const targets = [];
       const seen = new Set();
       const push = (url, objectId, source) => {
-        const key = url.split('?')[0];
-        if (seen.has(key)) return;
-        seen.add(key);
-        targets.push({ url: key, objectId, source });
+        const key = String(url).split('?')[0] + (String(url).includes('?') ? `?${String(url).split('?')[1]}` : '');
+        const dedupe = key.replace(/\/$/, '');
+        if (!url || seen.has(dedupe)) return;
+        seen.add(dedupe);
+        targets.push({ url: String(url).split('#')[0], objectId: String(objectId || ''), source });
       };
 
-      for (const ep of ctx.attackSurface.endpoints || []) {
+      const pushObjectAndNeighbors = (url, objectId, source) => {
+        push(url, objectId, source);
+        for (const nid of neighborIds(objectId).slice(0, 3)) {
+          const nurl = replaceObjectId(url, objectId, nid);
+          if (nurl && nurl !== url) push(nurl, nid, `${source}-neighbor`);
+        }
+      };
+
+      for (const ep of ctx.attackSurface?.endpoints || []) {
         const method = (ep.method || 'GET').toUpperCase();
         if (method !== 'GET' && method !== 'HEAD') continue;
-        const m = String(ep.url || '').match(OBJECT_PATH_RE);
+        const raw = String(ep.url || '');
+        const m = raw.match(OBJECT_PATH_RE);
         if (m) {
-          const base = String(ep.url).replace(OBJECT_PATH_RE, `/${m[1]}/{id}`);
-          push(String(ep.url).split('?')[0], m[2], 'endpoint');
-          push(base.replace('{id}', '1'), '1', 'neighbor');
-          push(base.replace('{id}', '2'), '2', 'neighbor');
+          pushObjectAndNeighbors(raw.split('?')[0], m[2], 'endpoint');
         }
       }
 
-      for (const p of ctx.attackSurface.parameters || []) {
-        if (!/^(id|userId|accountId|orderId|docId|uuid)$/i.test(p.name)) continue;
-        push(`${p.endpoint}?${p.name}=1`, '1', 'query');
-        push(`${p.endpoint}?${p.name}=2`, '2', 'query');
+      for (const p of ctx.attackSurface?.parameters || []) {
+        if (!ID_PARAMS.test(p.name || '')) continue;
+        const sample = p.sample || p.example || p.value || '1';
+        const base = String(p.endpoint || '').split('?')[0];
+        if (!base) continue;
+        pushObjectAndNeighbors(`${base}?${p.name}=${encodeURIComponent(sample)}`, sample, 'query');
+        for (const nid of ['1', '2']) {
+          push(`${base}?${p.name}=${nid}`, nid, 'query-seed');
+        }
       }
 
-      for (const base of (ctx.attackSurface.apiBases || []).slice(0, 4)) {
+      for (const base of (ctx.attackSurface?.apiBases || []).slice(0, 4)) {
         try {
           const origin = base.includes('://') ? new URL(base).origin : `https://${base}`;
-          const root = /\/api$/i.test(base) ? base.replace(/\/$/, '') : `${origin}/api`;
-          for (const tpl of ['/users/1', '/users/2', '/accounts/1', '/orders/1', '/profiles/1']) {
+          const root = /\/api$/i.test(String(base).replace(/\/$/, ''))
+            ? String(base).replace(/\/$/, '')
+            : `${origin}/api`;
+          for (const tpl of [
+            '/users/1',
+            '/users/2',
+            '/accounts/1',
+            '/orders/1',
+            '/orders/2',
+            '/profiles/1',
+            '/customers/1',
+            '/invoices/1',
+          ]) {
             push(`${root}${tpl}`, tpl.split('/').pop(), 'seed');
           }
         } catch {
@@ -59,17 +96,25 @@ function createPlugin(manifest) {
         }
       }
 
-      for (const ep of (ctx.focusEndpoints || []).slice(0, 10)) {
+      for (const ep of (ctx.focusEndpoints || []).slice(0, 12)) {
         try {
           const u = ep.includes('://') ? ep : new URL(ep, ctx.request.targetUrl).href;
           const m = u.match(OBJECT_PATH_RE);
-          if (m) push(u.split('?')[0], m[2], 'focus');
+          if (m) pushObjectAndNeighbors(u.split('?')[0], m[2], 'focus');
+          else {
+            const parsed = new URL(u);
+            for (const [k, v] of parsed.searchParams.entries()) {
+              if (ID_PARAMS.test(k) && v) pushObjectAndNeighbors(u.split('#')[0], v, 'focus-query');
+            }
+          }
         } catch {
           /* ignore */
         }
       }
 
-      return { targets: targets.slice(0, 16) };
+      // Prefer real discovered IDs over generic seeds
+      targets.sort((a, b) => rankSource(a.source) - rankSource(b.source));
+      return { targets: targets.slice(0, MAX_TARGETS) };
     },
 
     async scan(ctx, discovery) {
@@ -85,8 +130,15 @@ function createPlugin(manifest) {
         altSession = null;
       }
 
+      const dualAccount = Boolean(altSession);
+      candidates.push({
+        mode: 'meta',
+        dualAccount,
+        hasAccountBCreds: Boolean(ctx.request?.username2 && ctx.request?.password2),
+      });
+
       try {
-        for (const t of (discovery.targets || []).slice(0, 12)) {
+        for (const t of (discovery.targets || []).slice(0, MAX_SCAN)) {
           try {
             const anon = await fetchProbe(primaryRequest, t.url, {}, timeout);
             candidates.push({ ...t, mode: 'anonymous', ...anon });
@@ -96,7 +148,6 @@ function createPlugin(manifest) {
               candidates.push({ ...t, mode: 'authenticated', ...authed });
             }
 
-            // Negative control: nonexistent id should not return the same sensitive 200
             const negUrl = negativeControlUrl(t.url);
             if (negUrl) {
               const negHeaders = Object.keys(authHeaders).length ? authHeaders : {};
@@ -109,7 +160,6 @@ function createPlugin(manifest) {
               });
             }
 
-            // Dual-account: user B session against same object URL
             if (altSession) {
               const cross = await fetchProbe(altSession.request, t.url, altSession.headers, timeout);
               candidates.push({
@@ -131,23 +181,40 @@ function createPlugin(manifest) {
 
     async verify(_ctx, candidates) {
       const findings = [];
-      const byUrl = groupByUrl(candidates || []);
-      const urls = Object.keys(byUrl).slice(0, 8);
+      const reported = new Set();
+      const meta = (candidates || []).find((c) => c.mode === 'meta');
+      const byUrl = groupByUrl((candidates || []).filter((c) => c.mode !== 'meta'));
+      const urls = Object.keys(byUrl).slice(0, 10);
+      // Compute horizontal pairs once across the whole candidate set
+      const globalHorizontal = findHorizontalPair([], byUrl);
 
       for (const url of urls) {
         const group = byUrl[url];
         const anon = group.find((c) => c.mode === 'anonymous' && isSensitiveExposure(c));
-        const authed = group.find((c) => c.mode === 'authenticated' && isSensitiveExposure(c));
         const cross = group.find((c) => c.mode === 'cross-user' && isSensitiveExposure(c));
         const neg = group.find((c) => c.mode === 'negative-control');
-        const hit = cross || anon || authed;
+        const horizontal =
+          globalHorizontal &&
+          (globalHorizontal.primary.url.startsWith(url) ||
+            globalHorizontal.neighbor.url.startsWith(url) ||
+            globalHorizontal.primary.url.split('?')[0] === url ||
+            globalHorizontal.neighbor.url.split('?')[0] === url)
+            ? globalHorizontal
+            : null;
+
+        const hit = cross || anon || (horizontal ? horizontal.primary : null);
         if (!hit) continue;
+
+        const reportKey = `${shortPath(hit.url)}|${hit.mode}|${horizontal ? 'h' : ''}|${cross ? 'c' : ''}|${anon ? 'a' : ''}`;
+        if (reported.has(reportKey)) continue;
+        reported.add(reportKey);
 
         const signals = [];
         const jsonTyped = /json/i.test(hit.contentType || '');
         if (jsonTyped) signals.push('json-typed', 'evidence');
-        if (anon) signals.push('evidence');
+        if (anon) signals.push('evidence', 'unauthenticated');
         if (cross) signals.push('cross-user', 'evidence');
+        if (horizontal) signals.push('horizontal-idor', 'evidence');
         if (
           neg &&
           hit.status === 200 &&
@@ -159,22 +226,30 @@ function createPlugin(manifest) {
 
         const confidence = gradeFromSignals(signals, { issueFound: true });
         const severity =
-          confidence === 'Confirmed'
+          confidence === 'Confirmed' || cross || anon
             ? 'High'
-            : cross || (anon && jsonTyped)
+            : horizontal
               ? 'High'
               : 'Medium';
 
         const titleMode = cross
           ? 'cross-user Account B'
-          : hit.mode === 'anonymous'
+          : anon
             ? 'anonymous'
-            : 'authenticated Account A';
+            : horizontal
+              ? 'horizontal ID mutation'
+              : 'authenticated Account A';
 
         findings.push({
           pluginId: manifest.id,
           title: `IDOR / BOLA on ${shortPath(hit.url)} (${titleMode})`,
-          description: buildIdorDescription(hit, { cross: Boolean(cross), negOk: signals.includes('negative-control') }),
+          description: buildIdorDescription(hit, {
+            cross: Boolean(cross),
+            anon: Boolean(anon),
+            horizontal: Boolean(horizontal),
+            negOk: signals.includes('negative-control'),
+            dualAccount: Boolean(meta?.dualAccount),
+          }),
           severity,
           confidence,
           cvss: cvssFor('idor', severity),
@@ -190,17 +265,26 @@ function createPlugin(manifest) {
             evidenceWithSignals(
               cross
                 ? 'IDOR/BOLA dual-account proof (Account A object → Account B session)'
-                : 'IDOR/BOLA GET probe (Account A / anonymous)',
+                : horizontal
+                  ? 'IDOR horizontal proof (multiple object IDs return sensitive JSON)'
+                  : 'IDOR/BOLA GET probe (anonymous / unauthorized)',
               signals,
               {
                 mode: hit.mode,
-                accountRole: cross ? 'Account B against Account A object' : hit.mode === 'anonymous' ? 'anonymous' : 'Account A',
+                accountRole: cross
+                  ? 'Account B against Account A object'
+                  : anon
+                    ? 'anonymous'
+                    : 'Account A',
                 status: hit.status,
                 contentType: hit.contentType,
                 bodySnippet: (hit.bodySnippet || '').slice(0, 280),
                 crossUser: Boolean(cross),
+                horizontal: Boolean(horizontal),
+                neighborUrl: horizontal?.neighbor?.url,
                 negativeControl: signals.includes('negative-control'),
                 confirmationSignals: signals,
+                dualAccountUsed: Boolean(meta?.dualAccount),
               },
             ),
             ...(cross
@@ -214,6 +298,17 @@ function createPlugin(manifest) {
                   }),
                 ]
               : []),
+            ...(horizontal?.neighbor
+              ? [
+                  evidenceWithSignals('horizontal-neighbor', ['horizontal-idor'], {
+                    url: horizontal.neighbor.url,
+                    objectId: horizontal.neighbor.objectId,
+                    status: horizontal.neighbor.status,
+                    identityA: horizontal.identityA,
+                    identityB: horizontal.identityB,
+                  }),
+                ]
+              : []),
             ...(neg
               ? [
                   evidenceWithSignals('negative-control', ['negative-control'], {
@@ -224,15 +319,21 @@ function createPlugin(manifest) {
                 ]
               : []),
           ],
-          http: [...(hit.http || []), ...(cross?.http || []), ...(neg?.http || [])].slice(0, 6),
+          http: [...(hit.http || []), ...(cross?.http || []), ...(horizontal?.neighbor?.http || []), ...(neg?.http || [])].slice(
+            0,
+            6,
+          ),
           impact: cross
             ? 'Account B can read Account A’s object data by identifier — broken object-level authorization (BOLA).'
-            : 'Attackers may read other users’ or objects’ data by changing identifiers.',
+            : horizontal
+              ? 'Changing object identifiers returns other records’ sensitive fields — classic IDOR.'
+              : 'Attackers may read other users’ or objects’ data by changing identifiers (including unauthenticated access).',
           remediation:
-            'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized. Retest with dual accounts (Account A + Account B) in CI.',
+            'Enforce object-level authorization on every request; never trust client-supplied IDs alone; return 403/404 when unauthorized. Retest with dual accounts (Account A + Account B).',
           references: [
             'https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/',
             'https://cwe.mitre.org/data/definitions/639.html',
+            'https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References',
           ],
           status:
             confidence === 'Confirmed' ? 'Confirmed' : confidence === 'Likely' ? 'Likely' : 'Possible',
@@ -244,13 +345,27 @@ function createPlugin(manifest) {
             'IDOR Testing',
             ...(jsonTyped ? ['JSON content-type check'] : []),
             ...(cross ? ['Dual-account access (Account A → Account B)'] : []),
+            ...(horizontal ? ['Horizontal ID mutation'] : []),
             ...(signals.includes('negative-control') ? ['Negative control'] : []),
+            ...(anon ? ['Unauthenticated object access'] : []),
           ],
         });
       }
 
-      if (!findings.length) findings.push(passFinding(manifest, (candidates || [])[0]));
-      return findings.slice(0, 6);
+      if (!findings.length) {
+        const pass = passFinding(manifest, (candidates || []).find((c) => c.mode !== 'meta'));
+        if (meta && !meta.dualAccount && meta.hasAccountBCreds === false) {
+          pass.evidence = [
+            ...(pass.evidence || []),
+            {
+              technique: 'dual-account-hint',
+              note: 'Account B credentials were not provided — cross-user BOLA confirmation was skipped. Add Account B for stronger IDOR proof.',
+            },
+          ];
+        }
+        findings.push(pass);
+      }
+      return findings.slice(0, 8);
     },
 
     async report(findings) {
@@ -265,12 +380,110 @@ function createPlugin(manifest) {
   };
 }
 
+function rankSource(source) {
+  const s = String(source || '');
+  if (s.startsWith('focus')) return 0;
+  if (s.startsWith('endpoint')) return 1;
+  if (s.startsWith('query')) return 2;
+  if (s.includes('neighbor')) return 3;
+  return 4;
+}
+
+function neighborIds(objectId) {
+  const id = String(objectId || '').trim();
+  if (!id) return ['1', '2'];
+  if (/^\d+$/.test(id)) {
+    const n = Number(id);
+    const out = [];
+    for (const d of [1, -1, 2, 10, 100]) {
+      const v = n + d;
+      if (v > 0) out.push(String(v));
+    }
+    return [...new Set(out)];
+  }
+  // UUID / opaque: only try well-known numeric neighbors on alternate probes, not fake UUIDs
+  return [];
+}
+
+function replaceObjectId(url, fromId, toId) {
+  try {
+    if (OBJECT_PATH_RE.test(url) && fromId) {
+      return url.replace(OBJECT_PATH_RE, (_m, coll, id) =>
+        id === String(fromId) ? `/${coll}/${toId}` : `/${coll}/${id}`,
+      );
+    }
+    const hasScheme = /^https?:\/\//i.test(url);
+    const u = new URL(hasScheme ? url : `https://placeholder.local${url.startsWith('/') ? url : `/${url}`}`);
+    for (const key of [...u.searchParams.keys()]) {
+      if (ID_PARAMS.test(key) && u.searchParams.get(key) === String(fromId)) {
+        u.searchParams.set(key, String(toId));
+        return hasScheme ? u.toString() : `${u.pathname}${u.search}`;
+      }
+    }
+    if (OBJECT_PATH_RE.test(u.pathname)) {
+      u.pathname = u.pathname.replace(OBJECT_PATH_RE, (_m, coll) => `/${coll}/${toId}`);
+      return hasScheme ? u.toString() : `${u.pathname}${u.search}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function extractIdentities(bodySnippet) {
+  const out = new Set();
+  const text = String(bodySnippet || '');
+  let m;
+  const re = new RegExp(IDENTITY_RE.source, IDENTITY_RE.flags);
+  while ((m = re.exec(text))) {
+    out.add(`${m[1].toLowerCase()}:${String(m[2]).toLowerCase()}`);
+  }
+  return [...out];
+}
+
+function findHorizontalPair(authedHits, byUrl) {
+  // Compare sensitive authenticated responses across different object URLs
+  const pool = [];
+  for (const url of Object.keys(byUrl || {})) {
+    for (const c of byUrl[url]) {
+      if (c.mode === 'authenticated' && isSensitiveExposure(c)) pool.push(c);
+    }
+  }
+  // Also include authedHits from current group
+  for (const c of authedHits || []) {
+    if (!pool.includes(c)) pool.push(c);
+  }
+
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const a = pool[i];
+      const b = pool[j];
+      if (!a.objectId || !b.objectId || a.objectId === b.objectId) continue;
+      if (a.url.split('?')[0] === b.url.split('?')[0] && a.url === b.url) continue;
+      const idA = extractIdentities(a.bodySnippet);
+      const idB = extractIdentities(b.bodySnippet);
+      if (!idA.length || !idB.length) continue;
+      const overlap = idA.filter((x) => idB.includes(x));
+      // Different identity fields → likely different users/objects accessible
+      if (overlap.length < Math.min(idA.length, idB.length)) {
+        return {
+          primary: a,
+          neighbor: b,
+          identityA: idA.slice(0, 4),
+          identityB: idB.slice(0, 4),
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function passFinding(manifest, sample) {
   return {
     pluginId: manifest.id,
     title: 'No obvious IDOR / broken object access on probed endpoints',
     description:
-      'Safe GET probes against object-style endpoints did not return clear unauthorized sensitive JSON.',
+      'Safe GET probes against object-style endpoints did not show clear unauthorized sensitive JSON (anonymous, cross-user, or horizontal ID mutation).',
     severity: 'Informational',
     confidence: 'Informational',
     cvss: cvssFor('idor', 'Informational'),
@@ -283,7 +496,7 @@ function passFinding(manifest, sample) {
     http: sample?.http || [],
     impact: 'None',
     remediation:
-      'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized.',
+      'Enforce object-level authorization on every request; avoid trusting client-supplied IDs; return 403/404 when unauthorized. Provide Account B credentials for dual-account BOLA confirmation.',
     references: [
       'https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/',
     ],
@@ -295,22 +508,29 @@ function passFinding(manifest, sample) {
   };
 }
 
-function buildIdorDescription(hit, { cross, negOk }) {
+function buildIdorDescription(hit, { cross, anon, horizontal, negOk, dualAccount }) {
   const parts = [];
   if (cross) {
     parts.push(
       'Dual-account proof: an object URL discovered under Account A returned sensitive fields when requested with Account B’s session (cross-user / BOLA).',
     );
-  } else if (hit.mode === 'anonymous') {
+  } else if (anon) {
     parts.push(
       'An unauthenticated GET to an object endpoint returned user/object-like JSON fields without an authorization failure.',
     );
+  } else if (horizontal) {
+    parts.push(
+      'Horizontal IDOR signal: multiple different object identifiers returned sensitive JSON with differing identity fields under the same session.',
+    );
   } else {
     parts.push(
-      'An authenticated (Account A) GET to an object endpoint returned user/object-like JSON fields without an apparent authorization failure.',
+      'An authenticated GET to an object endpoint returned user/object-like JSON fields without an apparent authorization failure.',
     );
   }
   if (negOk) parts.push('A negative-control object ID did not return the same sensitive exposure.');
+  if (!dualAccount && !cross) {
+    parts.push('Account B was not used — add a second test account to confirm cross-user BOLA.');
+  }
   return parts.join(' ');
 }
 
@@ -334,8 +554,8 @@ function negativeControlUrl(url) {
     const u = new URL(
       hasScheme ? url : `https://placeholder.local${url.startsWith('/') ? url : `/${url}`}`,
     );
-    for (const key of ['id', 'userId', 'accountId', 'orderId']) {
-      if (u.searchParams.has(key)) {
+    for (const key of [...u.searchParams.keys()]) {
+      if (ID_PARAMS.test(key)) {
         u.searchParams.set(key, '999999991');
         return hasScheme ? u.toString() : `${u.pathname}${u.search}`;
       }
@@ -378,7 +598,6 @@ async function establishAltSession(ctx) {
         ? result.token
         : `Bearer ${result.token}`;
     }
-    // Cookie sessions: altCtx.request already carries Set-Cookie from login
     return {
       headers,
       request: altCtx.request,
@@ -437,4 +656,13 @@ function redactHeaders(headers) {
   return out;
 }
 
-module.exports = { createPlugin };
+module.exports = {
+  createPlugin,
+  OBJECT_PATH_RE,
+  ID_PARAMS,
+  neighborIds,
+  replaceObjectId,
+  negativeControlUrl,
+  isSensitiveExposure,
+  extractIdentities,
+};

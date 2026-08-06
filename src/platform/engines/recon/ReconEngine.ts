@@ -17,6 +17,8 @@ export interface ReconDiscoverOptions {
   scriptScanLimit?: number;
   /** Explicit OpenAPI/Swagger URLs supplied by the operator */
   openApiUrls?: string[];
+  /** Prefer OpenAPI-derived endpoints ahead of crawl-observed APIs */
+  prioritizeOpenApi?: boolean;
 }
 
 /**
@@ -72,7 +74,9 @@ export class ReconEngine {
       );
     }
 
-    const apis = mergeApis(base.apis || [], openapiEndpoints);
+    const apis = options.prioritizeOpenApi
+      ? mergeApis(openapiEndpoints, base.apis || [])
+      : mergeApis(base.apis || [], openapiEndpoints);
 
     this.logger.info('Reconnaissance complete', {
       pages: (base.visitedUrls || []).length,
@@ -80,6 +84,7 @@ export class ReconEngine {
       apis: apis.length,
       sitemapSeeds: sameOriginSeeds.length,
       openapiEndpoints: openapiEndpoints.length,
+      prioritizeOpenApi: Boolean(options.prioritizeOpenApi),
     });
 
     return {

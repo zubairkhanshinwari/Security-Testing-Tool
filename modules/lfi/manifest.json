@@ -1,14 +1,14 @@
 {
   "id": "lfi",
   "name": "Local File Inclusion / Path Traversal",
-  "version": "1.0.0",
-  "description": "Safe LFI/path-traversal probes for well-known OS files (read-only indicators, non-destructive).",
+  "version": "1.1.0",
+  "description": "Safe LFI/path-traversal checks: traversal and known-file signatures with baseline compare. Read-only, non-destructive — no write/RCE payloads.",
   "category": "Injection",
-  "enabledByDefault": false,
-  "recommended": false,
-  "securityTypeIds": ["lfi", "path_traversal"],
+  "enabledByDefault": true,
+  "recommended": true,
+  "securityTypeIds": ["lfi", "path_traversal", "owasp_top10"],
   "owasp": ["A01:2021-Broken Access Control", "A03:2021-Injection"],
   "cwe": ["CWE-22", "CWE-98"],
   "modes": ["active-safe", "authenticated"],
-  "tags": ["lfi", "path-traversal", "injection"]
+  "tags": ["lfi", "path-traversal", "injection", "safe"]
 }

@@ -139,6 +139,9 @@ const KNOWLEDGE: Record<
 function inferKey(f: Finding): KnowledgeKey {
   const blob = `${f.pluginId} ${f.module} ${f.title} ${(f.mappings?.cwe || []).join(' ')}`.toLowerCase();
   if (blob.includes('nosql') || (f.mappings?.cwe || []).includes('CWE-943')) return 'nosqli';
+  if (blob.includes('ssti') || blob.includes('template') || (f.mappings?.cwe || []).includes('CWE-1336')) {
+    return 'generic'; // SSTI remediation kept on plugin; impact via resolveBusinessImpact
+  }
   if (blob.includes('sql') || (f.mappings?.cwe || []).includes('CWE-89')) return 'sqli';
   if (blob.includes('xss') || (f.mappings?.cwe || []).includes('CWE-79')) return 'xss';
   if (blob.includes('cors')) return 'cors';
@@ -146,6 +149,7 @@ function inferKey(f: Finding): KnowledgeKey {
   if (blob.includes('jwt')) return 'jwt';
   if (blob.includes('csrf')) return 'csrf';
   if (blob.includes('idor') || blob.includes('bola')) return 'idor';
+  if (blob.includes('cookie')) return 'generic';
   if (blob.includes('disclosure') || blob.includes('sensitive')) return 'info-disclosure';
   return 'generic';
 }
@@ -173,13 +177,20 @@ export class KnowledgeEngine {
       };
 
       const businessImpact = resolveBusinessImpact(f as unknown as Record<string, unknown>);
+      // Prefer plugin-specific remediation when Knowledge uses generic fallback
+      const remediation =
+        f.issueFound && f.remediation && key === 'generic'
+          ? f.remediation
+          : f.issueFound
+            ? kn.remediation
+            : f.remediation;
 
       return {
         ...f,
         mappings,
         cvss: f.cvss || cvssFor(key === 'generic' ? 'headers' : key, f.severity) || std?.defaultCvss || null,
         impact: f.issueFound ? businessImpact : f.impact,
-        remediation: f.issueFound ? kn.remediation : f.remediation,
+        remediation,
         references: [...new Set([...(f.references || []), ...kn.references])],
         knowledge: {
           technicalExplanation: kn.technical,

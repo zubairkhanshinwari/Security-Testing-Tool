@@ -4,14 +4,13 @@ const { mappingsFor, cvssFor } = require(path.join(
   'src/platform/core/standards/mappings.js',
 ));
 
-/** Safe math polyglots — expect reflected 49 / 7777, never RCE payloads. */
+/** Safe math polyglots — expect reflected 49 / never RCE payloads. */
 const PROBES = [
   { payload: '{{7*7}}', expect: '49', engine: 'jinja/twig/nunjucks' },
   { payload: '${7*7}', expect: '49', engine: 'freemarker/expression' },
   { payload: '<%= 7*7 %>', expect: '49', engine: 'erb/ejs' },
   { payload: '#{7*7}', expect: '49', engine: 'ruby' },
   { payload: '*{7*7}', expect: '49', engine: 'thymeleaf' },
-  { payload: '{{7*\'7\'}}', expect: '49', engine: 'jinja-str' },
 ];
 
 function createPlugin(manifest) {
@@ -60,27 +59,48 @@ function createPlugin(manifest) {
       for (const t of (discovery.targets || []).slice(0, 8)) {
         for (const probe of PROBES.slice(0, 2)) {
           try {
-            const base = new URL(t.endpoint, ctx.request.targetUrl);
-            base.searchParams.set(t.parameter, probe.payload);
-            const res = await request.fetch(base.toString(), {
+            const baselineUrl = new URL(t.endpoint, ctx.request.targetUrl);
+            // Neutral value for baseline — avoids empty-param edge cases
+            baselineUrl.searchParams.set(t.parameter, 'secureassess_baseline');
+            const baseRes = await request.fetch(baselineUrl.toString(), {
+              failOnStatusCode: false,
+              timeout,
+            });
+            const baselineBody = await baseRes.text();
+
+            const probeUrl = new URL(t.endpoint, ctx.request.targetUrl);
+            probeUrl.searchParams.set(t.parameter, probe.payload);
+            const res = await request.fetch(probeUrl.toString(), {
               failOnStatusCode: false,
               timeout,
             });
             const body = await res.text();
-            // Evaluated math without echoing the raw template expression
-            const hit = body.includes(probe.expect) && !body.includes(probe.payload);
+
+            // Require evaluation signal AND that baseline did not already contain "49"
+            // (HubSpot/marketing pages often contain "49" → classic false positive).
+            const evaluated =
+              body.includes(probe.expect) &&
+              !body.includes(probe.payload) &&
+              !baselineBody.includes(probe.expect);
+            const signals = [];
+            if (evaluated) signals.push('baseline-diff', 'math-eval');
+            if (body.includes(probe.expect) && baselineBody.includes(probe.expect)) {
+              signals.push('expect-already-in-baseline');
+            }
 
             candidates.push({
-              endpoint: base.toString(),
+              endpoint: probeUrl.toString(),
               parameter: t.parameter,
               payload: probe.payload,
               engine: probe.engine,
               expect: probe.expect,
               status: res.status(),
-              hit,
+              hit: evaluated,
+              signals,
               bodySnippet: body.slice(0, 280),
+              baselineHadExpect: baselineBody.includes(probe.expect),
             });
-            if (hit) break;
+            if (evaluated) break;
           } catch {
             /* continue */
           }
@@ -94,17 +114,20 @@ function createPlugin(manifest) {
       const sample = hits.length ? hits.slice(0, 5) : (candidates || []).slice(0, 1);
       return sample.map((c) => {
         const issueFound = Boolean(c.hit);
-        const severity = issueFound ? 'High' : 'Informational';
+        // Keep Possible/Medium until VerificationEngine has stronger multi-signal proof
+        const severity = issueFound ? 'Medium' : 'Informational';
         return {
           pluginId: manifest.id,
           title: issueFound
             ? `Possible SSTI (${c.engine}) on parameter "${c.parameter}"`
             : 'No obvious SSTI on probed parameters',
           description: issueFound
-            ? `Template math payload evaluated to ${c.expect} without reflecting the raw expression — possible server-side template injection.`
-            : 'Safe SSTI math polyglots were not evaluated on the probed parameters.',
+            ? `Template math payload appears evaluated to ${c.expect} and the baseline response did not contain ${c.expect}. Still requires manual confirmation — not treated as Confirmed RCE.`
+            : c.baselineHadExpect || (c.signals || []).includes('expect-already-in-baseline')
+              ? 'SSTI math expect string was already present in the baseline page (common false positive); no differential evaluation proved.'
+              : 'Safe SSTI math polyglots were not evaluated on the probed parameters.',
           severity,
-          confidence: issueFound ? 'Likely' : 'Informational',
+          confidence: issueFound ? 'Possible' : 'Informational',
           cvss: issueFound ? cvssFor('ssti', severity) : null,
           mappings: mappingsFor('ssti'),
           affectedUrl: c.endpoint,
@@ -113,28 +136,34 @@ function createPlugin(manifest) {
           method: 'GET',
           evidence: [
             {
-              technique: 'SSTI math polyglot',
+              technique: 'SSTI math polyglot + baseline compare',
               payload: c.payload,
               expect: c.expect,
               engine: c.engine,
               status: c.status,
               bodySnippet: c.bodySnippet,
+              confirmationSignals: c.signals || [],
+              baselineHadExpect: c.baselineHadExpect,
             },
           ],
           http: [],
           impact: issueFound
-            ? 'Template injection can lead to remote code execution depending on the engine.'
+            ? 'If confirmed, template injection can lead to remote code execution depending on the engine.'
             : 'None',
-          remediation: 'Never concat user input into templates; use sandboxed logic-less templates and strict allow-lists.',
+          remediation:
+            'Never concatenate user input into server-side templates; use sandboxed logic-less templates and strict allow-lists. Manually verify any Possible SSTI before treating it as RCE.',
           references: [
-            'https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server_Side_Template_Injection',
+            'https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing-for-Server-Side-Template-Injection',
             'https://cwe.mitre.org/data/definitions/1336.html',
           ],
-          status: issueFound ? 'Confirmed' : 'Pass',
+          status: issueFound ? 'Possible' : 'Pass',
           issueFound,
           testMode: 'active-safe',
           module: 'SSTI',
-          techniques: ['Server-Side Template Injection'],
+          techniques: ['Server-Side Template Injection', 'Baseline differential'],
+          verification: issueFound
+            ? { signalCount: (c.signals || []).length, signals: c.signals || [], retestRecommended: true }
+            : undefined,
         };
       });
     },
@@ -144,7 +173,7 @@ function createPlugin(manifest) {
     },
 
     async score(findings) {
-      return { delta: findings.some((f) => f.issueFound) ? 22 : 0, notes: [] };
+      return { delta: findings.some((f) => f.issueFound) ? 12 : 0, notes: [] };
     },
   };
 }

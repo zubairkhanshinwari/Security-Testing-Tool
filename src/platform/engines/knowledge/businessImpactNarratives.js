@@ -34,6 +34,8 @@ const NARRATIVES = {
     'Local file inclusion or path traversal can let attackers read files from the server filesystem. That may expose source code, configuration, and secrets that unlock broader access to data stores. The business risk is credential theft and a path to larger breaches.',
   'open-redirect':
     'Open redirects let attackers bounce users through your trusted domain to a phishing site. Victims are more likely to enter passwords or payment details because the first click looked legitimate. Business impact is credential theft, brand abuse, and support/fraud costs.',
+  clickjacking:
+    'Without frame protections, attackers can overlay your real pages inside a hidden iframe and trick users into clicking actions they cannot see. That can change settings, approve transfers, or perform other authenticated actions under the victim’s session. Business impact is unauthorized user actions, fraud, and eroded trust in your UI.',
   generic:
     'This weakness can increase the chance that attackers access data, abuse accounts, or disrupt normal operations, depending on where it sits in the app. Even “supporting” issues often make a later breach cheaper and faster. Remediate according to severity and whether authenticated or sensitive data is in reach.',
 };
@@ -56,6 +58,7 @@ function inferImpactKey(finding) {
   if (blob.includes('sql') || (finding.mappings?.cwe || []).includes('CWE-89')) return 'sqli';
   if (blob.includes('xss') || (finding.mappings?.cwe || []).includes('CWE-79')) return 'xss';
   if (blob.includes('cors')) return 'cors';
+  if (blob.includes('clickjack') || blob.includes('frame-ancestors') || blob.includes('x-frame')) return 'clickjacking';
   if (blob.includes('header')) return 'headers';
   if (blob.includes('jwt')) return 'jwt';
   if (blob.includes('csrf')) return 'csrf';
@@ -65,6 +68,9 @@ function inferImpactKey(finding) {
   if (blob.includes('ssrf')) return 'ssrf';
   if (blob.includes('lfi') || blob.includes('path traversal') || blob.includes('traversal')) return 'lfi';
   if (blob.includes('redirect')) return 'open-redirect';
+  if (blob.includes('password') || blob.includes('weak-password')) return 'generic';
+  if (blob.includes('upload') || blob.includes('file-upload')) return 'generic';
+  if (blob.includes('rate')) return 'generic';
   if (blob.includes('disclosure') || blob.includes('sensitive') || blob.includes('.map')) return 'info-disclosure';
   return 'generic';
 }

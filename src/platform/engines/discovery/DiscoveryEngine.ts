@@ -40,6 +40,7 @@ export class DiscoveryEngine {
       homeSettleMs: options.homeSettleMs,
       scriptScanLimit: options.scriptScanLimit,
       openApiUrls: options.openApiUrls,
+      prioritizeOpenApi: options.prioritizeOpenApi,
     });
     if (options.repo) {
       if (options.merge && options.repo.hasDiscovery()) {

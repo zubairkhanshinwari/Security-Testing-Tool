@@ -22,7 +22,7 @@ Options:
   --types <ids>          Comma-separated security type ids
   --plugins <ids>        Comma-separated plugin ids
   --mode <mode>          passive | active-safe | authenticated
-  --profile <id>         quick | standard | deep | focused
+  --profile <id>         quick | standard | deep | openapi | focused
   --focus <urls>         Comma-separated focus paths/URLs (high-value routes)
   --openapi <url>        OpenAPI/Swagger document URL
   --out <dir>            Reports directory override

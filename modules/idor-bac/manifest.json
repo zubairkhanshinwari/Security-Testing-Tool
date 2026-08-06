@@ -1,8 +1,8 @@
 {
   "id": "idor-bac",
   "name": "IDOR / Broken Access Control",
-  "version": "1.0.0",
-  "description": "Safe BOLA/IDOR checks: GET-only object probes for unauthorized sensitive data exposure (non-destructive).",
+  "version": "1.1.0",
+  "description": "Safe BOLA/IDOR checks: GET-only object probes, neighbor ID mutation, dual-account (Account B) confirmation. Non-destructive — no create/update/delete.",
   "category": "Access Control",
   "enabledByDefault": true,
   "recommended": true,
@@ -10,5 +10,5 @@
   "owasp": ["A01:2021-Broken Access Control"],
   "cwe": ["CWE-639", "CWE-284"],
   "modes": ["passive", "active-safe", "authenticated"],
-  "tags": ["idor", "bac", "bola", "access-control", "owasp"]
+  "tags": ["idor", "bac", "bola", "access-control", "owasp", "safe"]
 }

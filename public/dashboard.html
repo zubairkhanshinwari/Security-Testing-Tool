@@ -309,6 +309,7 @@
         <div class="row-actions" style="margin:10px 0">
           <button class="small danger" id="detailDeleteBtn">Delete Project</button>
           <button class="small" id="detailRunBtn" ${data.project.targetUrl ? '' : 'disabled'}>Run</button>
+          <button class="small" id="detailRetestBtn" ${data.project.targetUrl && (data.scans || []).length ? '' : 'disabled'} title="Re-run using last scan settings, then compare New/Fixed/Unchanged">Re-run vs last scan</button>
         </div>
         <h3 style="margin:8px 0;font-size:14px;color:var(--navy)">Stack & languages</h3>
         ${renderInventory(data.inventory)}
@@ -326,6 +327,107 @@
           targetUrl: data.project.targetUrl || '',
         });
       }
+      const retestBtn = document.getElementById('detailRetestBtn');
+      if (retestBtn) {
+        retestBtn.onclick = () => retestVsLastScan(data);
+      }
+    }
+
+    async function retestVsLastScan(data) {
+      const project = data.project;
+      if (!project?.targetUrl) {
+        alert('This project has no target URL.');
+        return;
+      }
+      const scans = Array.isArray(data.scans) ? data.scans.slice() : [];
+      // list is oldest→newest; latest is last
+      const latest = scans.length ? scans[scans.length - 1] : null;
+      if (!latest?.id) {
+        alert('No previous scan to retest against. Use Run first.');
+        return;
+      }
+
+      let prior = {};
+      try {
+        const full = await fetch('/api/scans/' + latest.id).then((r) => r.json());
+        prior = full?.result?.meta || full?.meta?.meta || full?.meta || {};
+      } catch {
+        prior = latest.meta || {};
+      }
+
+      const profile = prior.scanProfile || 'standard';
+      const securityTypes = prior.securityTypesRequested || prior.securityTypes || undefined;
+      const openApiUrl = prior.openApiUrl || '';
+      const focusEndpoints = Array.isArray(prior.focusEndpoints)
+        ? prior.focusEndpoints
+        : (prior.focusEndpointCount ? undefined : undefined);
+
+      const useAuth = confirm(
+        `Re-run vs last scan for "${project.name}"?\n\n` +
+        `Last: ${latest.code || latest.id}\n` +
+        `Profile: ${profile}\n` +
+        `Types: ${Array.isArray(securityTypes) ? securityTypes.length + ' selected' : 'defaults'}\n` +
+        (openApiUrl ? `OpenAPI: ${openApiUrl}\n` : '') +
+        `\nAfter this run finishes, open the project again to see New / Fixed / Unchanged.\n\n` +
+        'OK = continue (optional auth prompt next). Cancel = abort.'
+      );
+      if (!useAuth) return;
+
+      let username = '';
+      let password = '';
+      let username2 = '';
+      let password2 = '';
+      if (confirm('Provide Account A credentials for authenticated retest? (Cancel = anonymous/public only)')) {
+        username = window.prompt('Account A username/email', '') || '';
+        password = username ? (window.prompt('Account A password', '') || '') : '';
+        if (username && confirm('Also provide Account B for IDOR/BOLA?')) {
+          username2 = window.prompt('Account B username/email', '') || '';
+          password2 = username2 ? (window.prompt('Account B password', '') || '') : '';
+        }
+      }
+
+      const body = {
+        targetUrl: project.targetUrl,
+        projectName: project.name,
+        projectId: project.id,
+        environment: prior.environment || 'Development',
+        testerName: 'SecureAssess Dashboard Retest',
+        securityTypes,
+        profile,
+        openApiUrl: openApiUrl || null,
+        focusEndpoints: focusEndpoints || [],
+        username: username || null,
+        password: password || null,
+        username2: username2 || null,
+        password2: password2 || null,
+        authorized: true,
+      };
+
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(out.error || 'Failed to start retest');
+        return;
+      }
+
+      localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify({
+        jobId: out.jobId,
+        targetUrl: project.targetUrl,
+        projectName: project.name,
+        projectId: project.id,
+        retestOf: latest.id,
+        startedAt: new Date().toISOString(),
+      }));
+      localStorage.removeItem('secureassess.lastJob');
+
+      document.getElementById('detail').innerHTML =
+        `<span class="muted">Retest started against last scan <span class="code-id">${escapeHtml(latest.code || latest.id)}</span>. ` +
+        `Job ${escapeHtml(out.jobId)}. When complete, reopen this project for New / Fixed / Unchanged.</span>`;
+      trackBackgroundScan();
     }
 
     function renderRegressionCompare(cmp) {
