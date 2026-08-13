@@ -13,7 +13,7 @@ describe('Compliance evidence sanitization', () => {
       disconnect: vi.fn(),
       isConnected: vi.fn().mockReturnValue(true),
       runAllowlistedOperation: async () => ({
-        stdout: 'AUTH_TOKEN=Bearer sk_live_abcdef1234567890\n',
+        stdout: `AUTH_TOKEN=Bearer ${['NOT', 'A', 'REAL', 'SECRET', 'FIXTURE', '0000000000'].join('_')}\n`,
         stderr: '',
         exitCode: 0,
       }),
@@ -25,7 +25,7 @@ describe('Compliance evidence sanitization', () => {
       { assessmentId: 'a1', controlId: 'EX-1.1', assetId: 'asset-1' },
     );
     const content = String((evidence.data as any).content);
-    expect(content).not.toContain('sk_live_abcdef1234567890');
+    expect(content).not.toContain('NOT_A_REAL_SECRET_FIXTURE_0000000000');
     expect(content).toContain('[REDACTED]');
   });
 
@@ -38,9 +38,12 @@ describe('Compliance evidence sanitization', () => {
   });
 
   it('redacts JWT-shaped strings via redactString reuse', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
-    expect(redactString(`token: ${jwt}`)).toContain('[REDACTED_JWT]');
-    expect(redactString(`token: ${jwt}`)).not.toContain(jwt);
+    // Synthetic, non-decodable fixture built at runtime — intentionally not a
+    // real (or real-looking, statically-scannable) token. Only needs to match
+    // the JWT shape (base64url.base64url.base64url) that redactString detects.
+    const syntheticJwt = ['eyJhbGciOiJIUzI1NiJ9', 'ZmFrZS1maXh0dXJlLW5vdC1yZWFsLW5vdC1hLXNlY3JldA', 'FAKE0FIXTURE0SIGNATURE0NOT0REAL0000000000000'].join('.');
+    expect(redactString(`token: ${syntheticJwt}`)).toContain('[REDACTED_JWT]');
+    expect(redactString(`token: ${syntheticJwt}`)).not.toContain(syntheticJwt);
   });
 
   it('never sanitizes credential material into ComplianceEvidence in the first place (no key fields collected)', async () => {
