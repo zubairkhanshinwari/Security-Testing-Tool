@@ -7,12 +7,14 @@ import { JobController } from '../engines/jobs/JobController';
 import { validateTargetUrl } from '../core/safety/targetPolicy';
 import { runPreflight } from '../core/safety/preflight';
 import { redactSecrets } from '../core/safety/redact';
+import { bootstrapCompliance } from '../../compliance/bootstrap';
+import { complianceRouter } from '../../compliance/api/complianceRouter';
 
 const nodeRequire = createRequire(__filename);
 
 async function main() {
   const root = process.cwd();
-  const { config, logger, orchestrator, pluginManager, store } = await bootstrap(root);
+  const { config, logger, orchestrator, pluginManager, store, container } = await bootstrap(root);
   const app = express();
   const PORT = Number(process.env.PORT || config.app.port || 3847);
   const REPORTS = path.join(root, config.storage.reportsDir);
@@ -20,10 +22,26 @@ async function main() {
   const jobs = new JobController(Math.max(1, Math.min(4, maxConcurrent)));
   const apiKeyRequired = process.env.SECUREASSESS_API_KEY || '';
 
+  // Separate CIS Linux compliance pipeline — additive mount only, no existing
+  // DAST route below is modified.
+  const complianceJobs = new JobController(1);
+  const compliance = bootstrapCompliance(root, container, logger);
+
   fs.mkdirSync(REPORTS, { recursive: true });
   app.use(express.json({ limit: '2mb' }));
   app.use(express.static(path.join(root, 'public')));
   app.use('/reports', express.static(REPORTS));
+  app.use(
+    '/api/compliance',
+    complianceRouter({
+      complianceEngine: compliance.complianceEngine,
+      complianceStore: compliance.complianceStore,
+      complianceReporting: compliance.complianceReporting,
+      benchmarkManager: compliance.benchmarkManager,
+      jobs: complianceJobs,
+      logger: logger.child('compliance:api'),
+    }),
+  );
 
   // Optional API key for enterprise deployments (backward compatible when unset)
   app.use('/api', (req, res, next) => {

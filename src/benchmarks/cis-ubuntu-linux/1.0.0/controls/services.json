@@ -1,0 +1,54 @@
+[
+  {
+    "controlId": "EX-3.1",
+    "title": "Ensure telnet server is not installed",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). Telnet transmits credentials and data in cleartext and should not be present on a hardened server.",
+    "tags": ["services", "network"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "package-state",
+        "target": "telnetd",
+        "collectionMethod": "package-installed:telnetd",
+        "description": "Whether the telnetd package is installed"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "installed", "operator": "equals", "value": "false" }
+      ],
+      "failureReason": "telnetd package is installed."
+    },
+    "remediationMetadata": {
+      "summary": "Run: apt-get remove telnetd",
+      "references": []
+    }
+  },
+  {
+    "controlId": "EX-3.2",
+    "title": "Ensure the sshd service is enabled and active",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). Confirms the SSH daemon service state as collected evidence (used to demonstrate service-state evidence type).",
+    "tags": ["services", "ssh"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "service-state",
+        "target": "ssh",
+        "collectionMethod": "service-status:ssh",
+        "description": "systemd unit state for the ssh service"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "active", "operator": "equals", "value": "true" }
+      ],
+      "failureReason": "ssh service is not active."
+    },
+    "remediationMetadata": {
+      "summary": "Run: systemctl enable --now ssh",
+      "references": []
+    }
+  }
+]

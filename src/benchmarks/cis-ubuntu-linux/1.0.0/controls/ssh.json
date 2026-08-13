@@ -1,0 +1,54 @@
+[
+  {
+    "controlId": "EX-1.1",
+    "title": "Ensure SSH root login is disabled",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). Disabling direct root login over SSH reduces the impact of credential compromise and forces privileged access through an auditable sudo path.",
+    "tags": ["ssh", "authentication"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "file-content",
+        "target": "/etc/ssh/sshd_config",
+        "collectionMethod": "read-file:/etc/ssh/sshd_config",
+        "description": "SSH daemon configuration file"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "content", "operator": "matches-regex", "value": "(?im)^\\s*PermitRootLogin\\s+no\\s*$" }
+      ],
+      "failureReason": "PermitRootLogin is not explicitly set to \"no\" in /etc/ssh/sshd_config."
+    },
+    "remediationMetadata": {
+      "summary": "Set \"PermitRootLogin no\" in /etc/ssh/sshd_config and restart sshd.",
+      "references": ["https://www.openssh.com/manual.html"]
+    }
+  },
+  {
+    "controlId": "EX-1.2",
+    "title": "Ensure SSH protocol version is not set to an insecure value",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). Modern sshd defaults to protocol 2; explicit protocol 1 configuration should not be present.",
+    "tags": ["ssh"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "file-content",
+        "target": "/etc/ssh/sshd_config",
+        "collectionMethod": "read-file:/etc/ssh/sshd_config",
+        "description": "SSH daemon configuration file"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "content", "operator": "not-matches-regex", "value": "(?im)^\\s*Protocol\\s+1\\s*$" }
+      ],
+      "failureReason": "Insecure \"Protocol 1\" directive found in /etc/ssh/sshd_config."
+    },
+    "remediationMetadata": {
+      "summary": "Remove any \"Protocol 1\" directive so sshd uses the SSH-2 default.",
+      "references": ["https://www.openssh.com/manual.html"]
+    }
+  }
+]

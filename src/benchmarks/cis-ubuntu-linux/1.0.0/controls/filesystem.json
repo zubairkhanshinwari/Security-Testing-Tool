@@ -1,0 +1,48 @@
+[
+  {
+    "controlId": "EX-2.1",
+    "title": "Ensure /etc/passwd permissions are configured correctly",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). /etc/passwd should be world-readable but not group/world-writable.",
+    "tags": ["filesystem", "permissions"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "permission-metadata",
+        "target": "/etc/passwd",
+        "collectionMethod": "stat-file:/etc/passwd",
+        "description": "File mode/owner metadata for /etc/passwd"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "mode", "operator": "permission-at-most", "value": "644" }
+      ],
+      "failureReason": "/etc/passwd permissions are more permissive than 644."
+    },
+    "remediationMetadata": {
+      "summary": "Run: chmod 644 /etc/passwd",
+      "references": []
+    }
+  },
+  {
+    "controlId": "EX-2.2",
+    "title": "Ensure separate partition exists for /tmp",
+    "level": "2",
+    "automated": false,
+    "description": "Example control (not official CIS text). Confirming /tmp is a separate mount typically requires reviewing the deployment's partitioning scheme/fstab intent, which benefits from human review even when raw evidence is collected.",
+    "tags": ["filesystem", "partitioning"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "command-output",
+        "target": "/tmp",
+        "collectionMethod": "mount-info:/tmp",
+        "description": "Mount table entry for /tmp"
+      }
+    ],
+    "remediationMetadata": {
+      "summary": "Provision /tmp on its own partition/volume with nodev,nosuid,noexec mount options where operationally feasible.",
+      "references": []
+    }
+  }
+]

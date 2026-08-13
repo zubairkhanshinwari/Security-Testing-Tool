@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ComplianceControl",
+  "type": "object",
+  "required": ["controlId", "title", "level", "automated", "evidenceRequirements", "remediationMetadata"],
+  "properties": {
+    "controlId": { "type": "string" },
+    "title": { "type": "string" },
+    "level": { "type": "string", "enum": ["1", "2"] },
+    "automated": { "type": "boolean" },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "evidenceRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidenceType", "target", "collectionMethod"],
+        "properties": {
+          "evidenceType": {
+            "type": "string",
+            "enum": [
+              "file-content",
+              "command-output",
+              "service-state",
+              "package-state",
+              "permission-metadata",
+              "sysctl-value"
+            ]
+          },
+          "target": { "type": "string" },
+          "collectionMethod": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "evaluationDefinition": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "operator"],
+            "properties": {
+              "field": { "type": "string" },
+              "operator": {
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "not-equals",
+                  "contains",
+                  "not-contains",
+                  "matches-regex",
+                  "not-matches-regex",
+                  "exists",
+                  "not-exists",
+                  "permission-at-most"
+                ]
+              },
+              "value": { "type": ["string", "number"] }
+            }
+          }
+        },
+        "failureReason": { "type": "string" }
+      }
+    },
+    "remediationMetadata": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string" },
+        "references": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

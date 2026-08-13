@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CIS Linux Benchmark Assessment — SecureAssess</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f5f6f8; color: #1a1a1a; }
+  header { background: #101828; color: #fff; padding: 1rem 1.5rem; }
+  header a { color: #9db4ff; text-decoration: none; font-size: 0.85rem; }
+  main { max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  .card { background: #fff; border: 1px solid #e3e3e6; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 0.25rem; }
+  .assessment-type { display: flex; gap: 12px; margin-bottom: 1.5rem; }
+  .assessment-type a, .assessment-type span { flex: 1; text-align: center; padding: 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 0.85rem; text-decoration: none; color: #333; }
+  .assessment-type .active { background: #101828; color: #fff; border-color: #101828; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; margin: 0.9rem 0 0.3rem; color: #333; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .controls-list { max-height: 220px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-top: 6px; }
+  .controls-list label { display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 4px 0; }
+  .controls-list input[type=checkbox] { width: auto; }
+  button { margin-top: 1.25rem; width: 100%; padding: 12px; background: #101828; color: #fff; border: none; border-radius: 8px; font-size: 0.95rem; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .authorize { display: flex; align-items: flex-start; gap: 10px; margin-top: 1.25rem; font-size: 0.85rem; }
+  .authorize input { width: auto; margin-top: 3px; }
+  #status { margin-top: 1rem; font-size: 0.85rem; white-space: pre-wrap; }
+  .hint { font-size: 0.75rem; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div><strong>SecureAssess</strong> — CIS Linux Benchmark Assessment</div>
+  <a href="/index.html">&larr; Back to Web Security / DAST</a>
+</header>
+<main>
+  <div class="card">
+    <div class="assessment-type">
+      <a href="/index.html">Web Security / DAST</a>
+      <span class="active">CIS Linux Benchmark</span>
+    </div>
+    <h1>CIS Linux Benchmark Assessment</h1>
+    <p class="hint">Authorized Ubuntu/Linux server compliance assessment. Read-only, non-destructive, SSH key-based access only.</p>
+
+    <form id="complianceForm">
+      <label>Target Linux Server (hostname or IP)</label>
+      <input id="hostname" type="text" placeholder="e.g. internal-web-01.corp.example" required />
+
+      <div class="row">
+        <div>
+          <label>SSH Port</label>
+          <input id="port" type="number" value="22" min="1" max="65535" />
+        </div>
+        <div>
+          <label>Connection Method</label>
+          <select id="connectionMethod" disabled>
+            <option>SSH (key-based)</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Benchmark</label>
+      <select id="benchmarkId">
+        <option value="cis-ubuntu-linux">CIS Ubuntu Linux Benchmark</option>
+      </select>
+
+      <div class="row">
+        <div>
+          <label>Benchmark Version</label>
+          <select id="benchmarkVersion"><option value="1.0.0">1.0.0</option></select>
+        </div>
+        <div>
+          <label>Profile</label>
+          <select id="profile">
+            <option value="server-level-1">Server — Level 1</option>
+            <option value="server-level-2">Server — Level 2</option>
+            <option value="all">All controls</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Selected Controls (optional — leave all unchecked to use the profile default)</label>
+      <div class="controls-list" id="controlsList">
+        <span class="hint">Loading control catalog…</span>
+      </div>
+
+      <label>Credential Reference</label>
+      <div class="row">
+        <div>
+          <select id="credentialType">
+            <option value="env">Environment variable</option>
+            <option value="ssh-key">SSH key file path</option>
+          </select>
+        </div>
+        <div>
+          <input id="credentialRef" type="text" placeholder="e.g. SECUREASSESS_LINUX_SSH_KEY" required />
+        </div>
+      </div>
+      <p class="hint">Credentials are never stored in plaintext, logged, or included in reports/evidence. Only a pointer (env var name or key path) is submitted here.</p>
+
+      <div class="authorize">
+        <input id="authorized" type="checkbox" required />
+        <label for="authorized" style="margin:0;font-weight:400;">I confirm I am authorized to perform this assessment against the target Linux server.</label>
+      </div>
+
+      <button type="submit" id="submitBtn">Start CIS Linux Assessment</button>
+    </form>
+    <div id="status"></div>
+  </div>
+</main>
+<script>
+  const controlsList = document.getElementById('controlsList');
+  const benchmarkId = document.getElementById('benchmarkId');
+  const benchmarkVersion = document.getElementById('benchmarkVersion');
+
+  async function loadControls() {
+    try {
+      const res = await fetch(`/api/compliance/benchmarks/${benchmarkId.value}/${benchmarkVersion.value}/controls`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load controls');
+      controlsList.innerHTML = (data.controls || []).map(c => `
+        <label>
+          <input type="checkbox" value="${c.controlId}" />
+          <span>${c.controlId} — ${c.title} ${c.automated ? '' : '(manual review)'}</span>
+        </label>
+      `).join('') || '<span class="hint">No controls found for this benchmark/version.</span>';
+    } catch (err) {
+      controlsList.innerHTML = `<span class="hint">Could not load controls: ${err.message}</span>`;
+    }
+  }
+  benchmarkId.addEventListener('change', loadControls);
+  benchmarkVersion.addEventListener('change', loadControls);
+  loadControls();
+
+  document.getElementById('complianceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('status');
+    const submitBtn = document.getElementById('submitBtn');
+    const selectedControls = [...controlsList.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
+
+    const payload = {
+      target: {
+        hostname: document.getElementById('hostname').value,
+        port: Number(document.getElementById('port').value) || 22,
+      },
+      benchmarkId: benchmarkId.value,
+      benchmarkVersion: benchmarkVersion.value,
+      profile: document.getElementById('profile').value,
+      selectedControls: selectedControls.length ? selectedControls : undefined,
+      credentialRef: {
+        type: document.getElementById('credentialType').value,
+        ref: document.getElementById('credentialRef').value,
+      },
+      authorized: document.getElementById('authorized').checked,
+    };
+
+    submitBtn.disabled = true;
+    status.textContent = 'Submitting assessment request…';
+    try {
+      const res = await fetch('/api/compliance/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      status.textContent = `Assessment started. Job ID: ${data.jobId}\nPoll GET /api/compliance/jobs/${data.jobId} for progress, then fetch /api/compliance/<assessmentId>/results once complete.`;
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

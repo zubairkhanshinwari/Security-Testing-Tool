@@ -17,6 +17,6 @@
     "moduleResolution": "node",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/platform/**/*", "modules/**/*", "tests/**/*", "config/**/*"],
+  "include": ["src/platform/**/*", "src/compliance/**/*", "modules/**/*", "tests/**/*", "config/**/*"],
   "exclude": ["node_modules", "dist", "reports", "public"]
 }

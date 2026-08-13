@@ -1,0 +1,7 @@
+{
+  "benchmarkId": "cis-ubuntu-linux",
+  "name": "CIS Ubuntu Linux Benchmark (example control set)",
+  "version": "1.0.0",
+  "platform": "ubuntu-linux",
+  "profile": "server-level-1"
+}

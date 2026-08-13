@@ -12,8 +12,8 @@
     "ci:gate": "node scripts/ci-gate.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"src/platform/**/*.{ts,js}\" \"modules/**/*.js\" \"tests/**/*.ts\"",
-    "format": "prettier --write \"src/platform/**/*.{ts,js}\" \"modules/**/*.{js,json,md}\" \"docs/**/*.md\" \"tests/**/*.ts\"",
+    "lint": "eslint \"src/platform/**/*.{ts,js}\" \"src/compliance/**/*.ts\" \"modules/**/*.js\" \"tests/**/*.ts\"",
+    "format": "prettier --write \"src/platform/**/*.{ts,js}\" \"src/compliance/**/*.ts\" \"modules/**/*.{js,json,md}\" \"docs/**/*.md\" \"tests/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "build:run": "npm run build && npm start",
@@ -33,11 +33,13 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^4.21.2",
-    "playwright": "^1.51.0"
+    "playwright": "^1.51.0",
+    "ssh2": "^1.16.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.10",
+    "@types/ssh2": "^1.15.1",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "eslint": "^8.57.1",

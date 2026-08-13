@@ -1,0 +1,7 @@
+{
+  "benchmarkId": "bad-benchmark",
+  "name": "Malformed fixture",
+  "version": "1.0.0",
+  "platform": "ubuntu-linux",
+  "profile": "server-level-1"
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "controlId": "EX-4.1",
+    "title": "Ensure IP forwarding is disabled",
+    "level": "1",
+    "automated": true,
+    "description": "Example control (not official CIS text). A host that is not acting as a router should not have IP forwarding enabled.",
+    "tags": ["kernel", "network"],
+    "evidenceRequirements": [
+      {
+        "evidenceType": "sysctl-value",
+        "target": "net.ipv4.ip_forward",
+        "collectionMethod": "sysctl-get:net.ipv4.ip_forward",
+        "description": "Current runtime sysctl value"
+      }
+    ],
+    "evaluationDefinition": {
+      "rules": [
+        { "field": "value", "operator": "equals", "value": "0" }
+      ],
+      "failureReason": "net.ipv4.ip_forward is not set to 0."
+    },
+    "remediationMetadata": {
+      "summary": "Run: sysctl -w net.ipv4.ip_forward=0 and persist via /etc/sysctl.d/.",
+      "references": []
+    }
+  }
+]

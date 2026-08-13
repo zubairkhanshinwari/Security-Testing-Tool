@@ -51,4 +51,8 @@ export const TOKENS = {
   ReportingEngine: 'ReportingEngine',
   ScanOrchestrator: 'ScanOrchestrator',
   ProjectStore: 'ProjectStore',
+  // Compliance pipeline (additive — does not alter any DAST token above)
+  ComplianceAssessmentEngine: 'ComplianceAssessmentEngine',
+  ComplianceAssessmentStore: 'ComplianceAssessmentStore',
+  CISBenchmarkManager: 'CISBenchmarkManager',
 } as const;
