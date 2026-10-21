@@ -4,323 +4,269 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SecureAssess Platform</title>
-  <style>
-    :root {
-      --navy: #0b1f3a;
-      --accent: #1f6feb;
-      --bg: #f4f7fb;
-      --card: #ffffff;
-      --line: #dbe3ef;
-      --text: #0f172a;
-      --muted: #64748b;
-      --ok: #059669;
-      --warn: #9a3412;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Calibri, Arial, sans-serif;
-      background:
-        radial-gradient(1200px 500px at 10% -10%, #dbeafe 0%, transparent 55%),
-        radial-gradient(900px 400px at 100% 0%, #e2e8f0 0%, transparent 50%),
-        var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
-    .hero {
-      background: linear-gradient(145deg, #0b1f3a, #12355b 60%, #1e4976);
-      color: #fff;
-      border-radius: 18px;
-      padding: 28px;
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
-      margin-bottom: 22px;
-    }
-    .hero h1 { margin: 0 0 8px; font-size: 1.7rem; }
-    .hero p { margin: 0; opacity: 0.9; line-height: 1.5; }
-    .badge {
-      display: inline-block; margin-top: 14px;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 999px; padding: 4px 10px; font-size: 12px;
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 22px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-    }
-    label.field {
-      display: block; font-size: 13px; font-weight: 600;
-      color: var(--navy); margin: 14px 0 6px;
-    }
-    input[type="text"], input[type="url"], input[type="password"], select {
-      width: 100%; border: 1px solid var(--line); border-radius: 10px;
-      padding: 11px 12px; font-size: 14px; outline: none; background: #fff;
-    }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31,111,235,0.15); }
-    .password-field { position: relative; }
-    .password-field input {
-      padding-right: 44px;
-    }
-    .password-toggle {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      width: 34px; height: 34px; margin: 0; padding: 0;
-      border: none; border-radius: 8px; background: transparent;
-      color: var(--muted); cursor: pointer;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .password-toggle:hover { color: var(--navy); background: #f1f5f9; }
-    .password-toggle:focus-visible {
-      outline: none; color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(31,111,235,0.15);
-    }
-    .password-toggle svg { width: 18px; height: 18px; display: block; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-    .auth-box {
-      margin-top: 8px; padding: 12px; border-radius: 10px;
-      background: #eff6ff; border: 1px solid #bfdbfe; font-size: 12px; color: #1e3a8a;
-    }
-    .check-auth {
-      display: flex; gap: 10px; align-items: flex-start;
-      margin-top: 16px; padding: 12px; border-radius: 10px;
-      background: #fff7ed; border: 1px solid #fdba74; color: var(--warn); font-size: 13px;
-    }
-    .check-auth input { margin-top: 3px; }
-    .sec-head {
-      display: flex; justify-content: space-between; align-items: center;
-      gap: 12px; margin-top: 18px; flex-wrap: wrap;
-    }
-    .sec-head h3 { margin: 0; color: var(--navy); font-size: 15px; }
-    .sec-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .sec-actions button {
-      width: auto; margin: 0; padding: 7px 10px; font-size: 12px;
-      background: #e2e8f0; color: var(--navy);
-    }
-    .sec-actions button.primary { background: var(--accent); color: #fff; }
-    .types {
-      margin-top: 10px; max-height: 340px; overflow: auto;
-      border: 1px solid var(--line); border-radius: 12px; padding: 8px;
-      background: #f8fafc;
-    }
-    .type-item {
-      display: grid; grid-template-columns: 22px 1fr; gap: 8px;
-      padding: 8px 8px; border-radius: 8px;
-    }
-    .type-item:hover { background: #fff; }
-    .type-item.recommended { background: #ecfdf5; }
-    .type-item.is-checked:not(.recommended) { background: #eff6ff; border: 1px solid #bfdbfe; }
-    .type-item .name { font-weight: 650; font-size: 13px; color: var(--navy); }
-    .type-item .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .type-item .tag {
-      display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
-      color: #065f46; background: #d1fae5; border-radius: 999px; padding: 1px 6px;
-    }
-    .type-item .tag.avail { color: #1e3a8a; background: #dbeafe; }
-    .type-item .tag.unavail { color: #475569; background: #e2e8f0; }
-    .type-item.unavailable { opacity: 0.75; }
-    .group-title {
-      font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-      color: var(--muted); font-weight: 700; margin: 10px 8px 4px;
-    }
-    button#startBtn {
-      margin-top: 18px; width: 100%; border: 0; border-radius: 12px;
-      padding: 13px 16px; background: var(--accent); color: #fff;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .status, .result, .error {
-      margin-top: 14px; border-radius: 12px; padding: 14px; display: none;
-    }
-    .status.show, .result.show, .error.show { display: block; }
-    .status { border: 1px solid var(--line); background: #f8fafc; }
-    .status .stage { font-weight: 700; color: var(--navy); }
-    .status .msg { color: var(--muted); margin-top: 4px; font-size: 14px; }
-    .result { border: 1px solid #a7f3d0; background: #ecfdf5; }
-    .result a {
-      display: inline-block; margin: 8px 10px 0 0; padding: 8px 12px;
-      border-radius: 8px; background: var(--navy); color: #fff;
-      text-decoration: none; font-size: 13px; font-weight: 600;
-    }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
-    .kpi { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
-    .kpi b { display: block; font-size: 18px; color: var(--navy); }
-    .kpi span { font-size: 11px; color: var(--muted); text-transform: uppercase; }
-    footer { margin-top: 18px; color: var(--muted); font-size: 12px; text-align: center; }
-    @media (max-width: 700px) {
-      .row, .kpis { grid-template-columns: 1fr; }
-    }
-  </style>
+  <link rel="stylesheet" href="/index.css" />
+  <script>
+    (function() {
+      try {
+        const theme = localStorage.getItem('secureassess.theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch(e) {}
+    })();
+  </script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="hero">
-      <h1>SecureAssess Platform</h1>
-      <p>
-        Enterprise authorized security assessment — plugin-based modules, OWASP/CWE/CVSS mapping,
-        optional login, and multi-format reports (HTML, PDF, JSON, SARIF, CSV, JUnit).
-      </p>
-      <div class="badge">Authorized only · Non-destructive · Plugin architecture · <a href="/dashboard.html" style="color:#fff">Open Dashboard</a> · <a href="/compliance.html" style="color:#fff">CIS Linux Benchmark</a></div>
-    </div>
-
-    <div class="card">
-      <form id="scanForm">
-        <label class="field" for="targetUrl">Target URL *</label>
-        <input id="targetUrl" type="url" placeholder="https://dev.example.com/" required />
-
-        <div class="row">
-          <div>
-            <label class="field" for="projectName">Project Name</label>
-            <input id="projectName" type="text" value="Web Security Assessment" />
-          </div>
-          <div>
-            <label class="field" for="environment">Environment</label>
-            <select id="environment">
-              <option>Development</option>
-              <option>Staging</option>
-              <option>QA</option>
-              <option>Production (authorized only)</option>
-            </select>
-          </div>
+  <div class="app-container">
+    <form id="scanForm">
+      <!-- TOP COMMAND BAR: Target URL & Global Controls -->
+      <header class="top-command-bar">
+        <div class="brand-section">
+          <span class="brand-title">SecureAssess</span>
+          <span class="brand-sep">//</span>
+          <span class="brand-sub">Platform</span>
         </div>
 
-        <div class="row">
-          <div>
-            <label class="field" for="scanProfile">Scan profile</label>
-            <select id="scanProfile">
-              <option value="quick">Quick — smoke / CI (~2–4 min)</option>
-              <option value="standard" selected>Standard — balanced (~4–10 min)</option>
-              <option value="deep">Deep — broader crawl (~15–35 min)</option>
-              <option value="openapi">OpenAPI-first — API-heavy apps (~8–25 min)</option>
-              <option value="focused">Focused — your routes / OpenAPI (~3–12 min)</option>
-            </select>
-            <p class="hint" id="profileHint">
-              Caps keep scans usable. Deep is slower and still may miss obscure routes — add Focus routes for critical areas.
-            </p>
-          </div>
-          <div>
-            <label class="field" for="openApiUrl">OpenAPI / Swagger URL (optional)</label>
-            <input id="openApiUrl" type="url" placeholder="https://dev.example.com/openapi.json" />
-            <p class="hint">Parsed into the attack surface (respects profile path caps).</p>
-          </div>
+        <div class="target-url-group">
+          <span class="url-prefix">TARGET &gt;</span>
+          <input
+            id="targetUrl"
+            class="target-url-input"
+            type="url"
+            placeholder="https://dev.example.com/"
+            required
+            autocomplete="url"
+          />
         </div>
 
-        <label class="field" for="focusEndpoints">Focus routes (optional)</label>
-        <textarea id="focusEndpoints" rows="3" placeholder="/api/users&#10;/admin/settings&#10;https://dev.example.com/api/orders/1" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:13px;font-family:Consolas,monospace;resize:vertical"></textarea>
-        <p class="hint">
-          One path or URL per line (or comma-separated). Seeded into discovery and prioritized for probes.
-          Use with <strong>Focused</strong> profile to spend time on these instead of a wide crawl.
-        </p>
+        <div class="top-bar-controls">
+          <select id="scanProfile" class="select-pill" title="Scan Profile">
+            <option value="quick">Quick (~2–4 min)</option>
+            <option value="standard" selected>Standard (~4–10 min)</option>
+            <option value="deep">Deep (~15–35 min)</option>
+            <option value="openapi">OpenAPI-first (~8–25 min)</option>
+            <option value="focused">Focused (~3–12 min)</option>
+          </select>
 
-        <div class="row">
-          <div>
-            <label class="field" for="testerName">Tester Name</label>
-            <input id="testerName" type="text" value="Security Assessment Tool" />
-          </div>
-          <div>
-            <label class="field" for="username">Account A — username / email (optional)</label>
-            <input id="username" type="text" placeholder="account-a@example.com" autocomplete="username" />
-          </div>
-        </div>
+          <label class="auth-pill-toggle" title="Written Authorization Required">
+            <input id="authorized" type="checkbox" required />
+            <span>Authorized Target</span>
+          </label>
 
-        <label class="field" for="password">Account A — password (optional)</label>
-        <div class="password-field">
-          <input id="password" type="password" placeholder="Session for authenticated probes (Account A)" autocomplete="current-password" />
-          <button type="button" id="togglePassword" class="password-toggle" aria-label="Show password" title="Show password" aria-pressed="false">
-            <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
+          <button id="startBtn" type="submit" class="btn-start-action">
+            Start Assessment &amp; Generate Report
           </button>
-        </div>
-        <div class="row">
-          <div>
-            <label class="field" for="username2">Account B — username / email (optional, IDOR)</label>
-            <input id="username2" type="text" placeholder="account-b@example.com" autocomplete="off" />
+
+          <div id="liveIndicator" class="live-indicator-pill">
+            <span class="indicator-dot"></span>
+            <span id="liveStatusText">IDLE</span>
           </div>
-          <div>
-            <label class="field" for="password2">Account B — password (optional)</label>
-            <div class="password-field">
-              <input id="password2" type="password" placeholder="Cross-user BOLA confirmation (Account B)" autocomplete="off" />
+
+          <nav class="nav-links">
+            <a href="/dashboard.html">Dashboard</a>
+            <span style="color:var(--border-medium)">|</span>
+            <a href="/compliance.html">CIS Linux</a>
+          </nav>
+        </div>
+      </header>
+
+      <!-- 3-COLUMN HUD GRID -->
+      <main class="hud-grid" style="margin-top: 14px;">
+        <!-- =================================================================
+             COLUMN 1: TARGET SCOPE & AUTHENTICATION
+             ================================================================= -->
+        <section class="hud-column">
+          <div class="col-header">
+            <span class="col-title">Scope &amp; Authentication</span>
+            <span class="col-meta">Target Config</span>
+          </div>
+
+          <div class="field-row-2">
+            <div class="field-group">
+              <label class="field-label" for="projectName">Project Name</label>
+              <input id="projectName" class="field-input" type="text" value="Web Security Assessment" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="environment">Environment</label>
+              <select id="environment" class="field-select">
+                <option>Development</option>
+                <option>Staging</option>
+                <option>QA</option>
+                <option>Production (authorized only)</option>
+              </select>
             </div>
           </div>
-        </div>
-        <div class="auth-box">
-          <strong>Account A</strong> authenticates the primary crawl and probes — the scan reports
-          <em>session ready</em> only after token/cookie/post-login proof (not just a form submit).
-          Add <strong>Account B</strong> (same role preferred) to confirm IDOR/BOLA.
-          If login fails or session is not ready, authenticated API coverage is limited and the report will warn you.
-        </div>
 
-        <div class="sec-head">
-          <h3>Type of Security Testing</h3>
-          <div class="sec-actions">
-            <button type="button" id="btnRecommended" class="primary">Select recommended</button>
-            <button type="button" id="btnAvailable">Select available scanners</button>
-            <button type="button" id="btnAll">Select all catalog</button>
-            <button type="button" id="btnNone">Clear</button>
+          <div class="field-group">
+            <label class="field-label" for="testerName">Tester Name</label>
+            <input id="testerName" class="field-input" type="text" value="Security Assessment Tool" />
           </div>
-        </div>
-        <p class="hint">
-          <strong>Available scanner</strong> = deep plugin or surface check exists.
-          <strong>No scanner yet</strong> = catalog label only (not deeply probed).
-          Prefer <em>Select available scanners</em>; “Select all catalog” overpromises if you assume full coverage.
-        </p>
-        <p class="hint" id="selectedCount" style="font-weight:700;color:var(--navy)">0 of 0 security types selected</p>
-        <div id="typesBox" class="types">Loading security testing types…</div>
 
-        <div class="check-auth">
-          <input id="authorized" type="checkbox" required />
-          <label for="authorized" style="margin:0;font-weight:500;color:inherit">
-            I own this target or have written authorization to perform security testing.
-            I understand probes are non-destructive but may generate application errors/logs.
+          <div class="field-group">
+            <label class="field-label" for="openApiUrl">OpenAPI / Swagger URL (optional)</label>
+            <input id="openApiUrl" class="field-input" type="url" placeholder="https://dev.example.com/openapi.json" />
+            <span class="field-hint">Parsed into the attack surface (respects profile path caps).</span>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="focusEndpoints">Focus routes (optional)</label>
+            <textarea
+              id="focusEndpoints"
+              class="field-textarea"
+              placeholder="/api/users&#10;/admin/settings&#10;https://dev.example.com/api/orders/1"
+            ></textarea>
+            <span class="field-hint" id="profileHint">
+              Standard (~4–10 min): balanced grey-box pass — NOT complete coverage.
+            </span>
+          </div>
+
+          <div class="form-section-title">Authentication (Optional)</div>
+
+          <div class="field-row-2">
+            <div class="field-group">
+              <label class="field-label" for="username">Account A — username / email</label>
+              <input id="username" class="field-input" type="text" placeholder="account-a@example.com" autocomplete="username" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="password">Account A — password</label>
+              <div class="password-input-wrap">
+                <input id="password" class="field-input" type="password" placeholder="Session for authenticated probes" autocomplete="current-password" />
+                <button type="button" id="togglePassword" class="password-toggle-btn" aria-label="Toggle password">
+                  <svg id="eyeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row-2">
+            <div class="field-group">
+              <label class="field-label" for="username2">Account B — username / email (IDOR)</label>
+              <input id="username2" class="field-input" type="text" placeholder="account-b@example.com" autocomplete="off" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="password2">Account B — password</label>
+              <input id="password2" class="field-input" type="password" placeholder="Cross-user BOLA confirmation" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="auth-badge-box">
+            <strong>Account A</strong> authenticates the primary crawl and probes — the scan reports <em>session ready</em> only after token/cookie/post-login proof. Add <strong>Account B</strong> (same role preferred) to confirm IDOR/BOLA.
+          </div>
+
+          <label class="checkbox-pill-wrap">
+            <input id="incremental" type="checkbox" />
+            <span>Incremental scan — reuse project baseline; prioritize new endpoints and previously confirmed issues.</span>
           </label>
-        </div>
+        </section>
 
-        <div class="check-auth" style="margin-top:10px">
-          <input id="incremental" type="checkbox" />
-          <label for="incremental" style="margin:0;font-weight:500;color:inherit">
-            Incremental scan — reuse project baseline; prioritize new endpoints and previously confirmed issues.
-          </label>
-        </div>
+        <!-- =================================================================
+             COLUMN 2: TYPE OF SECURITY TESTING (MODULES CATALOG)
+             ================================================================= -->
+        <section class="hud-column">
+          <div class="col-header">
+            <span class="col-title">Type of Security Testing</span>
+            <span class="col-meta" id="selectedCount">Loading catalog…</span>
+          </div>
 
-        <button id="startBtn" type="submit">Start Assessment &amp; Generate Report</button>
-      </form>
+          <div class="modules-filter-bar">
+            <button type="button" id="btnRecommended" class="btn-filter-pill primary">Select recommended</button>
+            <button type="button" id="btnAvailable" class="btn-filter-pill">Select available scanners</button>
+            <button type="button" id="btnAll" class="btn-filter-pill">Select all catalog</button>
+            <button type="button" id="btnNone" class="btn-filter-pill">Clear</button>
+          </div>
 
-      <div id="statusBox" class="status">
-        <div class="stage" id="stageText">Starting…</div>
-        <div class="msg" id="msgText">Please wait while the scanner runs.</div>
-        <div class="hint" id="bgHint" style="display:none;margin-top:10px">
-          You can open the <a href="/dashboard.html">Dashboard</a> anytime — the assessment keeps running in the background and will continue when you return here.
-        </div>
-      </div>
-      <div id="errorBox" class="error"></div>
-      <div id="resultBox" class="result">
-        <strong>Report ready</strong>
-        <div class="kpis">
-          <div class="kpi"><b id="kpiFindings">0</b><span>Findings</span></div>
-          <div class="kpi"><b id="kpiRisk">—</b><span>Risk</span></div>
-          <div class="kpi"><b id="kpiScore">—</b><span>Score</span></div>
-          <div class="kpi"><b id="kpiTypes">—</b><span>Types</span></div>
-        </div>
-        <div>
-          <a id="pdfLink" href="#" target="_blank">Download PDF</a>
-          <a id="htmlLink" href="#" target="_blank">Open HTML</a>
-          <a id="jsonLink" href="#" target="_blank">Raw JSON</a>
-          <a id="sarifLink" href="#" target="_blank">SARIF</a>
-          <a id="csvLink" href="#" target="_blank">CSV</a>
-        </div>
-      </div>
-    </div>
+          <div class="field-hint" style="margin-bottom: 6px;">
+            <strong>Available scanner</strong> = deep plugin or surface check exists. <strong>No scanner yet</strong> = catalog label only (not deeply probed).
+          </div>
 
-    <footer>
-      Safe techniques only. Do not use against systems without permission.
-      DoS/flood and destructive exploit testing are not performed by this tool.
+          <div id="typesBox" class="modules-list-box" style="flex: 1; max-height: calc(100vh - 270px); min-height: 480px;">
+            Loading security testing types…
+          </div>
+        </section>
+
+        <!-- =================================================================
+             COLUMN 3: EXECUTION, KPIS & GENERATED REPORTS
+             ================================================================= -->
+        <section class="hud-column">
+          <div class="col-header">
+            <span class="col-title">Assessment Execution &amp; Results</span>
+            <span class="col-meta" id="jobStateMeta">Standby</span>
+          </div>
+
+          <!-- Execution Status Box -->
+          <div id="statusBox" class="status-hud-card">
+            <div class="stage-badge" id="stageText">STARTING</div>
+            <div class="stage-message" id="msgText">Please wait while the scanner runs.</div>
+            <div class="field-hint" id="bgHint" style="display:none;margin-top:10px;">
+              You can open the <a href="/dashboard.html" style="color:var(--accent-blue)">Dashboard</a> anytime — the assessment keeps running in the background and will continue when you return here.
+            </div>
+          </div>
+
+          <!-- Error Box -->
+          <div id="errorBox" class="error-hud-card"></div>
+
+          <!-- Result Box -->
+          <div id="resultBox" class="result-hud-card">
+            <div class="col-title" style="color:var(--accent-green);font-size:12px;">
+              &#9632; Report ready
+            </div>
+
+            <div class="kpis-hud-grid">
+              <div class="kpi-hud-tile">
+                <span class="kpi-hud-val" id="kpiFindings">0</span>
+                <span class="kpi-hud-label">Findings</span>
+              </div>
+              <div class="kpi-hud-tile">
+                <span class="kpi-hud-val" id="kpiRisk">—</span>
+                <span class="kpi-hud-label">Risk</span>
+              </div>
+              <div class="kpi-hud-tile">
+                <span class="kpi-hud-val" id="kpiScore">—</span>
+                <span class="kpi-hud-label">Score</span>
+              </div>
+              <div class="kpi-hud-tile">
+                <span class="kpi-hud-val" id="kpiTypes">—</span>
+                <span class="kpi-hud-label">Types</span>
+              </div>
+            </div>
+
+            <div class="report-links-row">
+              <a id="pdfLink" class="report-export-btn" href="#" target="_blank">Download PDF</a>
+              <a id="htmlLink" class="report-export-btn" href="#" target="_blank">Open HTML</a>
+              <a id="jsonLink" class="report-export-btn" href="#" target="_blank">Raw JSON</a>
+              <a id="sarifLink" class="report-export-btn" href="#" target="_blank">SARIF</a>
+              <a id="csvLink" class="report-export-btn" href="#" target="_blank">CSV</a>
+            </div>
+          </div>
+
+          <!-- Safety Policy Notice (from original index.html) -->
+          <div class="auth-badge-box" style="margin-top: auto;">
+            <strong>Safety Notice:</strong> Safe techniques only. Do not use against systems without permission. DoS/flood and destructive exploit testing are not performed by this tool. Target policy is strictly enforced.
+          </div>
+        </section>
+      </main>
+    </form>
+
+    <footer class="cyber-footer">
+      SecureAssess Platform &bull; Authorized assessments only &bull; Non-destructive by design
     </footer>
   </div>
+
+  <!-- Right Floating Theme Toggle Button -->
+  <button type="button" id="themeToggleBtn" class="theme-toggle-floating" title="Switch Theme (Light / Dark)" aria-label="Toggle theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  </button>
 
   <script>
     const ACTIVE_JOB_KEY = 'secureassess.activeJob';
@@ -334,6 +280,10 @@
     const typesBox = document.getElementById('typesBox');
     const bgHint = document.getElementById('bgHint');
     const authorizedEl = document.getElementById('authorized');
+    const liveIndicator = document.getElementById('liveIndicator');
+    const liveStatusText = document.getElementById('liveStatusText');
+    const jobStateMeta = document.getElementById('jobStateMeta');
+
     let catalog = [];
     let pollTimer = null;
 
@@ -382,7 +332,6 @@
       }
     }
 
-    /** Restore exact user selection (Select all / custom). Never force recommended-only. */
     function applySelection(ids, { persist = true } = {}) {
       if (!Array.isArray(ids) || !ids.length) return false;
       const want = new Set(ids);
@@ -390,11 +339,10 @@
       typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
         el.checked = want.has(el.dataset.id);
         if (el.checked) matched += 1;
-        const item = catalog.find((t) => t.id === el.dataset.id);
         const row = el.closest('.type-item');
-        if (!row) return;
-        row.classList.toggle('recommended', !!item?.recommended);
-        row.classList.toggle('is-checked', el.checked);
+        if (row) {
+          row.classList.toggle('is-checked', el.checked);
+        }
       });
       updateSelectedCount();
       if (persist) persistSelection(ids);
@@ -428,9 +376,9 @@
         const item = catalog.find((t) => t.id === el.dataset.id);
         el.checked = Boolean(predicate(item));
         const row = el.closest('.type-item');
-        if (!row) return;
-        row.classList.toggle('recommended', !!item?.recommended);
-        row.classList.toggle('is-checked', el.checked);
+        if (row) {
+          row.classList.toggle('is-checked', el.checked);
+        }
       });
       updateSelectedCount();
       persistSelection();
@@ -442,7 +390,6 @@
       for (const t of types) {
         (groups[t.group] ||= []).push(t);
       }
-      // Default checked state only used when there is no saved selection
       const saved = preferredIds || loadPersistedSelection();
       const useSaved = Array.isArray(saved) && saved.length > 0;
       const savedSet = useSaved ? new Set(saved) : null;
@@ -455,15 +402,16 @@
             ? '<span class="tag avail">Available scanner</span>'
             : '<span class="tag unavail">No scanner yet</span>';
           return `
-          <label class="type-item ${t.recommended ? 'recommended' : ''} ${checked ? 'is-checked' : ''} ${avail ? '' : 'unavailable'}" data-coverage="${escAttr(t.coverage || 'implemented')}">
+          <label class="type-item ${checked ? 'is-checked' : ''}" data-coverage="${escAttr(t.coverage || 'implemented')}">
             <input type="checkbox" data-id="${t.id}" data-coverage="${escAttr(t.coverage || 'implemented')}" ${checked ? 'checked' : ''} />
             <span>
-              <span class="name">${t.name}${t.recommended ? '<span class="tag">Recommended</span>' : ''}${covTag}</span>
+              <span class="name">${t.name} ${t.recommended ? '<span class="tag">Recommended</span>' : ''} ${covTag}</span>
               <div class="desc">${t.description} <em>Ex: ${t.example}</em>${avail ? '' : ' — selected for tracking only; not deeply probed.'}</div>
             </span>
           </label>`;
         }).join('');
       }).join('');
+
       typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
         el.addEventListener('change', () => {
           el.closest('.type-item')?.classList.toggle('is-checked', el.checked);
@@ -507,11 +455,6 @@
       if (btnAvailable) btnAvailable.disabled = disabled;
       btnAll.disabled = disabled;
       btnNone.disabled = disabled;
-      if (disabled) {
-        authorizedEl.dataset.wasChecked = authorizedEl.checked ? '1' : '0';
-      } else if (authorizedEl.dataset.wasChecked === '1') {
-        authorizedEl.checked = true;
-      }
       authorizedEl.disabled = disabled;
       typesBox.querySelectorAll('input[type=checkbox][data-id]').forEach((el) => {
         el.disabled = disabled;
@@ -525,6 +468,10 @@
       bgHint.style.display = 'block';
       startBtn.disabled = true;
       startBtn.textContent = 'Scanning in background…';
+      liveStatusText.textContent = 'RUNNING';
+      liveIndicator.classList.add('active');
+      jobStateMeta.textContent = 'Running';
+      jobStateMeta.className = 'col-meta success';
       setTypeControlsDisabled(true);
       document.getElementById('stageText').textContent = 'RUNNING';
       document.getElementById('msgText').textContent = message || 'Assessment is running…';
@@ -534,14 +481,20 @@
       bgHint.style.display = 'none';
       startBtn.disabled = false;
       startBtn.textContent = 'Start Assessment & Generate Report';
+      liveStatusText.textContent = 'DONE';
+      liveIndicator.classList.add('active');
+      jobStateMeta.textContent = 'Completed';
+      jobStateMeta.className = 'col-meta success';
       setTypeControlsDisabled(false);
       statusBox.classList.add('show');
       document.getElementById('stageText').textContent = 'DONE';
       document.getElementById('msgText').textContent = 'Assessment complete. Reports are ready.';
       resultBox.classList.add('show');
+
       document.getElementById('kpiFindings').textContent = job.stats?.totalFindings ?? 0;
       document.getElementById('kpiRisk').textContent = job.stats?.overallRisk || '—';
       document.getElementById('kpiScore').textContent = (job.stats?.securityScore ?? '—') + '/100';
+
       const usedTypes =
         job.meta?.securityTypesRequested ||
         job.meta?.securityTypes ||
@@ -549,15 +502,17 @@
         [];
       document.getElementById('kpiTypes').textContent =
         job.meta?.securityTypesCount || usedTypes.length || '—';
-      // Keep the user's actual selection (e.g. Select all), do not reset to recommended
+
       if (usedTypes.length) applySelection(usedTypes);
       authorizedEl.checked = true;
+
       const files = job.files || {};
       document.getElementById('pdfLink').href = files.pdf || '#';
       document.getElementById('htmlLink').href = files.html || '#';
       document.getElementById('jsonLink').href = files.json || '#';
       document.getElementById('sarifLink').href = files.sarif || '#';
       document.getElementById('csvLink').href = files.csv || '#';
+
       if (job.targetUrl) document.getElementById('targetUrl').value = job.targetUrl;
       if (job.projectName) document.getElementById('projectName').value = job.projectName;
       if (job.meta?.projectName) document.getElementById('projectName').value = job.meta.projectName;
@@ -574,6 +529,10 @@
           clearActiveJob();
           startBtn.disabled = false;
           startBtn.textContent = 'Start Assessment & Generate Report';
+          liveStatusText.textContent = 'IDLE';
+          liveIndicator.classList.remove('active');
+          jobStateMeta.textContent = 'Standby';
+          jobStateMeta.className = 'col-meta';
           setTypeControlsDisabled(false);
           bgHint.style.display = 'none';
           showError('Previous assessment job was lost (server restarted). Start a new assessment.');
@@ -594,6 +553,10 @@
           clearActiveJob();
           startBtn.disabled = false;
           startBtn.textContent = 'Start Assessment & Generate Report';
+          liveStatusText.textContent = 'FAILED';
+          liveIndicator.classList.remove('active');
+          jobStateMeta.textContent = 'Failed';
+          jobStateMeta.className = 'col-meta';
           setTypeControlsDisabled(false);
           bgHint.style.display = 'none';
           showError(job.error || 'Scan failed');
@@ -605,7 +568,6 @@
         setTypeControlsDisabled(true);
         pollTimer = setTimeout(() => poll(jobId), 1500);
       } catch (err) {
-        // Network blip — keep trying; server scan continues
         pollTimer = setTimeout(() => poll(jobId), 2500);
       }
     }
@@ -620,7 +582,6 @@
         if (active.targetUrl) document.getElementById('targetUrl').value = active.targetUrl;
         if (active.projectName) document.getElementById('projectName').value = active.projectName;
         authorizedEl.checked = true;
-        authorizedEl.dataset.wasChecked = '1';
         poll(active.jobId);
         return;
       }
@@ -657,7 +618,7 @@
         quick: 'Quick (~2–4 min): smoke/CI only — not a full assessment. Score reflects shallow depth.',
         standard: 'Standard (~4–10 min): balanced grey-box pass — NOT complete coverage. Use Deep/OpenAPI-first/Focused + Account B for stronger API/BOLA.',
         deep: 'Deep (~15–35 min): broader crawl/OpenAPI. If you also set an OpenAPI URL, discovery auto-shifts OpenAPI-first.',
-        openapi: 'OpenAPI-first (~8–25 min): best for API-heavy apps (Falaya-style). Set OpenAPI/Swagger URL; shallow HTML crawl, large API path budget.',
+        openapi: 'OpenAPI-first (~8–25 min): best for API-heavy apps. Set OpenAPI/Swagger URL; shallow HTML crawl, large API path budget.',
         focused: 'Focused (~3–12 min): spends budget on Focus routes + OpenAPI. Best when you know high-value paths; shallow site-wide crawl.',
       };
       const sync = () => { hint.textContent = tips[sel.value] || tips.standard; };
@@ -703,6 +664,7 @@
         openApiUrl: document.getElementById('openApiUrl').value.trim(),
         authorized: true,
       };
+
       document.getElementById('msgText').textContent =
         'Preflight: checking target reachability (HTTP/TCP — not ping) and security plugins…';
       statusBox.classList.add('show');
@@ -730,6 +692,7 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to start scan');
+
         localStorage.removeItem(LAST_JOB_KEY);
         saveActiveJob({
           jobId: data.jobId,
@@ -747,6 +710,8 @@
       } catch (err) {
         startBtn.disabled = false;
         startBtn.textContent = 'Start Assessment & Generate Report';
+        liveStatusText.textContent = 'IDLE';
+        liveIndicator.classList.remove('active');
         setTypeControlsDisabled(false);
         applySelection(types);
         bgHint.style.display = 'none';
@@ -770,11 +735,58 @@
       btn.addEventListener('click', () => {
         const show = input.type === 'password';
         input.type = show ? 'text' : 'password';
-        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
         btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-        btn.title = show ? 'Hide password' : 'Show password';
         icon.innerHTML = show ? eyeOff : eyeOpen;
       });
+    })();
+
+    (function initThemeToggle() {
+      const THEME_KEY = 'secureassess.theme';
+      const sunSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+      const moonSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+      function getBtn() {
+        return document.getElementById('themeToggleBtn');
+      }
+
+      function apply(theme) {
+        const isLight = theme === 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        if (document.body) document.body.setAttribute('data-theme', theme);
+        const btn = getBtn();
+        if (btn) {
+          btn.innerHTML = isLight ? moonSvg : sunSvg;
+          btn.title = isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode';
+          btn.setAttribute('aria-label', isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode');
+        }
+      }
+
+      function toggle() {
+        const active = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = active === 'dark' ? 'light' : 'dark';
+        try {
+          localStorage.setItem(THEME_KEY, next);
+        } catch (e) {}
+        apply(next);
+      }
+
+      function setup() {
+        const btn = getBtn();
+        if (btn) {
+          btn.onclick = toggle;
+        }
+        let currentTheme = 'dark';
+        try {
+          currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
+        } catch (e) {}
+        apply(currentTheme);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setup);
+      } else {
+        setup();
+      }
     })();
 
     loadTypes().then(() => resumeJobIfAny());

@@ -4,154 +4,124 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SecureAssess Dashboard</title>
-  <style>
-    :root { --navy:#0b1f3a; --accent:#1f6feb; --bg:#f4f7fb; --line:#dbe3ef; --muted:#64748b; --danger:#dc2626; }
-    body { margin:0; font-family:"Segoe UI",Calibri,Arial,sans-serif; background:var(--bg); color:#0f172a; }
-    .wrap { max-width:1100px; margin:0 auto; padding:28px 18px 60px; }
-    header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
-    h1 { margin:0; color:var(--navy); font-size:1.5rem; }
-    .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    a.btn, button {
-      background:var(--accent); color:#fff; border:0; border-radius:10px;
-      padding:10px 14px; text-decoration:none; font-weight:700; cursor:pointer; font-size:13px;
-      display:inline-block;
-    }
-    a.btn.secondary, button.secondary {
-      background:#e2e8f0; color:var(--navy);
-    }
-    button.danger, a.btn.danger {
-      background:var(--danger); color:#fff;
-    }
-    button.small { padding:7px 10px; font-size:12px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-    .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
-    .card h2 { margin:0 0 10px; font-size:1rem; color:var(--navy); }
-    .muted { color:var(--muted); font-size:12px; }
-    table { width:100%; border-collapse:collapse; font-size:12px; }
-    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-    th { color:var(--muted); font-size:11px; text-transform:uppercase; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#e2e8f0; font-size:11px; font-weight:700; }
-    .pill.high { background:#fee2e2; color:#991b1b; }
-    .pill.med { background:#ffedd5; color:#9a3412; }
-    .code-id { display:inline-block; min-width:86px; font-family:Consolas,"Courier New",monospace; font-size:11px; font-weight:700; color:var(--navy); background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:2px 6px; margin-right:8px; }
-    .row-actions { display:flex; gap:6px; flex-wrap:wrap; }
-    input { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; margin:6px 0 10px; box-sizing:border-box; }
-    .running-banner {
-      display:none; margin-bottom:14px; padding:14px 16px; border-radius:12px;
-      background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;
-    }
-    .running-banner.show { display:block; }
-    .running-banner strong { display:block; margin-bottom:4px; }
-    .running-banner .actions { margin-top:10px; }
-    .info-grid {
-      display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:12px 0;
-    }
-    .info-tile {
-      background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px;
-    }
-    .info-tile .label { font-size:10px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.04em; }
-    .info-tile .value { margin-top:4px; font-size:13px; font-weight:650; color:var(--navy); word-break:break-word; }
-    .info-tile .value.big { font-size:20px; }
-    .stack-list { margin:0; padding-left:16px; font-size:12px; color:#334155; }
-    .endpoint-list { margin:8px 0 0; padding:0; list-style:none; font-size:11px; }
-    .endpoint-list li { padding:4px 0; border-bottom:1px solid var(--line); font-family:Consolas,monospace; }
-    .delta-summary { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 12px; }
-    .delta-tile {
-      min-width:88px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
-    }
-    .delta-tile .n { font-size:22px; font-weight:750; color:var(--navy); line-height:1.1; }
-    .delta-tile .l { font-size:10px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.04em; margin-top:2px; }
-    .delta-tile.new { border-color:#fecaca; background:#fef2f2; }
-    .delta-tile.new .n { color:#991b1b; }
-    .delta-tile.fixed { border-color:#bbf7d0; background:#f0fdf4; }
-    .delta-tile.fixed .n { color:#166534; }
-    .badge {
-      display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
-    }
-    .badge.new { background:#fee2e2; color:#991b1b; }
-    .badge.fixed { background:#dcfce7; color:#166534; }
-    .badge.unchanged { background:#e2e8f0; color:#334155; }
-    .badge.sev { background:#ffedd5; color:#9a3412; }
-    .reg-table-wrap { max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:10px; }
-    .reg-table-wrap table { margin:0; }
-    @media (max-width:900px){ .grid{grid-template-columns:1fr;} .info-grid{grid-template-columns:1fr 1fr;} }
-  </style>
+  <link rel="stylesheet" href="/index.css" />
+  <script>
+    (function() {
+      try {
+        const theme = localStorage.getItem('secureassess.theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch(e) {}
+    })();
+  </script>
 </head>
 <body>
-  <div class="wrap">
-    <header>
+  <div class="dash-wrap">
+    <header class="dash-header">
       <div>
-        <h1>SecureAssess Dashboard</h1>
-        <div class="muted">Projects · historical scans · trends · regression</div>
+        <h1>
+          <span>SecureAssess</span>
+          <span style="color:var(--text-muted);font-weight:400">//</span>
+          <span style="color:var(--accent-blue)">Dashboard</span>
+        </h1>
+        <div class="field-hint" style="margin-top:2px">Projects &middot; historical scans &middot; trends &middot; regression</div>
       </div>
-      <div class="actions">
-        <a class="btn secondary" href="/" id="backBtn">← Back to Assessment</a>
-        <a class="btn" href="/">New Assessment</a>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a class="btn-dash" href="/" id="backBtn">&larr; Back to Assessment</a>
+        <a class="btn-dash primary" href="/">New Assessment</a>
       </div>
     </header>
 
     <div id="runningBanner" class="running-banner">
-      <strong>Assessment running in background</strong>
-      <div id="runningText" class="muted" style="color:#1e40af">Checking status…</div>
-      <div class="actions">
-        <a class="btn" href="/">Return to Assessment (continues automatically)</a>
+      <strong style="color:var(--text-primary);display:block;">Assessment running in background</strong>
+      <div id="runningText" style="margin-top:4px">Checking status…</div>
+      <div style="margin-top:10px">
+        <a class="btn-dash primary small" href="/">Return to Assessment</a>
       </div>
     </div>
 
-    <div class="grid">
-      <div class="card" style="grid-column:1/-1">
-        <h2>Platform</h2>
-        <div id="health" class="muted">Loading…</div>
+    <div class="dash-grid">
+      <div class="dash-card" style="grid-column:1/-1">
+        <h2>Platform Health</h2>
+        <div id="health" class="field-hint">Loading…</div>
       </div>
-      <div class="card" style="grid-column:1/-1">
+      <div class="dash-card" style="grid-column:1/-1">
         <h2>Projects</h2>
-        <table>
-          <thead><tr><th>ID</th><th>Name</th><th>Target</th><th>Updated</th><th>Actions</th></tr></thead>
-          <tbody id="projectsBody"></tbody>
-        </table>
+        <div style="overflow-x:auto">
+          <table class="dash-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Target</th><th>Updated</th><th>Actions</th></tr></thead>
+            <tbody id="projectsBody"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="card" style="grid-column:1/-1">
+      <div class="dash-card" style="grid-column:1/-1">
         <h2>Recent Scans</h2>
-        <table>
-          <thead><tr><th>ID</th><th>Date</th><th>Target</th><th>Score</th><th>Risk</th><th>Findings</th><th>Reports</th></tr></thead>
-          <tbody id="scansBody"></tbody>
-        </table>
+        <div style="overflow-x:auto">
+          <table class="dash-table">
+            <thead><tr><th>ID</th><th>Date</th><th>Target</th><th>Score</th><th>Risk</th><th>Findings</th><th>Reports</th></tr></thead>
+            <tbody id="scansBody"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="card" style="grid-column:1/-1">
+      <div class="dash-card" style="grid-column:1/-1">
         <h2>Project Detail / Trends</h2>
-        <div id="detail" class="muted">Select a project to view trends and regression.</div>
+        <div id="detail" class="field-hint">Select a project to view trends and regression.</div>
       </div>
     </div>
   </div>
+
+  <!-- Right Floating Theme Toggle Button -->
+  <button type="button" id="themeToggleBtn" class="theme-toggle-floating" title="Switch Theme (Light / Dark)" aria-label="Toggle theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  </button>
+
   <script>
     const ACTIVE_JOB_KEY = 'secureassess.activeJob';
     let bgPollTimer = null;
 
     async function loadHealth() {
-      const h = await fetch('/api/health').then(r => r.json());
-      document.getElementById('health').innerHTML =
-        `<strong>${h.tool}</strong> v${h.version}<br/>Plugins: ${(h.plugins||[]).join(', ') || 'none'}`;
+      try {
+        const h = await fetch('/api/health').then(r => r.json());
+        document.getElementById('health').innerHTML =
+          `<strong style="color:var(--text-primary)">${escapeHtml(h.tool)}</strong> v${escapeHtml(h.version)}<br/>` +
+          `Active Plugins: <span style="color:var(--accent-blue)">${(h.plugins||[]).map(escapeHtml).join(', ') || 'none'}</span>`;
+      } catch (err) {
+        document.getElementById('health').textContent = 'Unable to query health endpoint.';
+      }
     }
 
     async function loadProjects() {
-      const data = await fetch('/api/projects').then(r => r.json());
-      const body = document.getElementById('projectsBody');
-      body.innerHTML = (data.projects || []).map(p => `
-        <tr>
-          <td><span class="code-id">${escapeHtml(p.code || 'project-???')}</span></td>
-          <td>${escapeHtml(p.name)}</td>
-          <td class="muted">${escapeHtml(p.targetUrl || '—')}</td>
-          <td class="muted">${(p.updatedAt||'').slice(0,19)}</td>
-          <td>
-            <div class="row-actions">
-              <button data-id="${p.id}" class="open small secondary">Open</button>
-            </div>
-          </td>
-        </tr>`).join('') || '<tr><td colspan="5" class="muted">No projects yet</td></tr>';
+      try {
+        const data = await fetch('/api/projects').then(r => r.json());
+        const body = document.getElementById('projectsBody');
+        body.innerHTML = (data.projects || []).map(p => `
+          <tr>
+            <td><span class="code-id">${escapeHtml(p.code || 'project-???')}</span></td>
+            <td><strong style="color:var(--text-primary)">${escapeHtml(p.name)}</strong></td>
+            <td style="font-family:var(--font-mono);color:var(--text-secondary)">${escapeHtml(p.targetUrl || '—')}</td>
+            <td style="font-family:var(--font-mono);color:var(--text-muted)">${(p.updatedAt||'').slice(0,19)}</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <button data-id="${escapeAttr(p.id)}" class="open btn-dash small">Open</button>
+              </div>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="5" style="color:var(--text-muted);padding:14px 10px;">No projects recorded yet. Run a scan to persist a project.</td></tr>';
 
-      body.querySelectorAll('button.open').forEach(btn => {
-        btn.onclick = () => openProject(btn.dataset.id);
-      });
+        body.querySelectorAll('button.open').forEach(btn => {
+          btn.onclick = () => openProject(btn.dataset.id);
+        });
+      } catch (e) {
+        document.getElementById('projectsBody').innerHTML = `<tr><td colspan="5" style="color:var(--accent-red)">Error loading projects: ${escapeHtml(e.message)}</td></tr>`;
+      }
     }
 
     async function runProject(project) {
@@ -204,8 +174,8 @@
       localStorage.removeItem('secureassess.lastJob');
 
       document.getElementById('detail').innerHTML =
-        `<span class="muted">Started assessment for <strong>${escapeHtml(project.name)}</strong>. ` +
-        `Job ${escapeHtml(data.jobId)}. You can watch progress below or return to Assessment.</span>`;
+        `<span style="color:var(--text-secondary)">Started assessment for <strong style="color:var(--text-primary)">${escapeHtml(project.name)}</strong>. ` +
+        `Job <span class="code-id">${escapeHtml(data.jobId)}</span>. You can watch progress below or return to Assessment.</span>`;
 
       trackBackgroundScan();
     }
@@ -220,53 +190,56 @@
         return;
       }
       document.getElementById('detail').innerHTML =
-        `<span class="muted">Deleted project and ${data.deletedScans || 0} scan record(s).</span>`;
+        `<span style="color:var(--text-muted)">Deleted project and ${data.deletedScans || 0} scan record(s).</span>`;
       loadProjects();
       loadScans();
     }
 
     async function loadScans() {
-      const data = await fetch('/api/scans').then(r => r.json());
-      const body = document.getElementById('scansBody');
-      // API returns oldest→newest; show last 25 so newest stay at the bottom
-      const scans = data.scans || [];
-      const view = scans.length > 25 ? scans.slice(-25) : scans;
-      body.innerHTML = view.map(s => {
-        const riskClass = /high|critical/i.test(s.risk) ? 'high' : /medium/i.test(s.risk) ? 'med' : '';
-        const files = s.files || {};
-        const links = ['html','pdf','json','sarif','csv']
-          .filter(k => files[k])
-          .map(k => `<a href="${files[k]}" target="_blank">${k}</a>`)
-          .join(' · ');
-        return `<tr>
-          <td><span class="code-id">${escapeHtml(s.code || 'scan-???')}</span></td>
-          <td>${(s.createdAt||'').slice(0,19)}</td>
-          <td>${escapeHtml(s.targetUrl)}</td>
-          <td><strong>${s.score}</strong>/100</td>
-          <td><span class="pill ${riskClass}">${escapeHtml(s.risk)}</span></td>
-          <td>${s.findings}</td>
-          <td>${links || '—'}</td>
-        </tr>`;
-      }).join('') || '<tr><td colspan="7" class="muted">No scans yet</td></tr>';
+      try {
+        const data = await fetch('/api/scans').then(r => r.json());
+        const body = document.getElementById('scansBody');
+        const scans = data.scans || [];
+        const view = scans.length > 25 ? scans.slice(-25) : scans;
+        body.innerHTML = view.map(s => {
+          const riskClass = /high|critical/i.test(s.risk) ? 'high' : /medium/i.test(s.risk) ? 'med' : '';
+          const files = s.files || {};
+          const links = ['html','pdf','json','sarif','csv']
+            .filter(k => files[k])
+            .map(k => `<a class="report-export-btn" href="${escapeAttr(files[k])}" target="_blank" style="padding:2px 8px;font-size:10px">${k.toUpperCase()}</a>`)
+            .join(' ');
+          return `<tr>
+            <td><span class="code-id">${escapeHtml(s.code || 'scan-???')}</span></td>
+            <td style="font-family:var(--font-mono);color:var(--text-muted)">${(s.createdAt||'').slice(0,19)}</td>
+            <td style="font-family:var(--font-mono);color:var(--text-secondary)">${escapeHtml(s.targetUrl)}</td>
+            <td style="font-family:var(--font-mono)"><strong style="color:var(--text-primary)">${escapeHtml(String(s.score))}</strong>/100</td>
+            <td><span class="pill ${riskClass}">${escapeHtml(s.risk)}</span></td>
+            <td style="font-family:var(--font-mono);font-weight:600">${escapeHtml(String(s.findings))}</td>
+            <td><div style="display:flex;gap:4px;flex-wrap:wrap">${links || '—'}</div></td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="7" style="color:var(--text-muted);padding:14px 10px;">No scan history yet.</td></tr>';
+      } catch (err) {
+        document.getElementById('scansBody').innerHTML = `<tr><td colspan="7" style="color:var(--accent-red)">Error loading scans: ${escapeHtml(err.message)}</td></tr>`;
+      }
     }
 
     function joinList(arr, empty = 'Not detected') {
-      if (!arr || !arr.length) return empty;
+      if (!arr || !arr.length) return `<span style="color:var(--text-muted)">${empty}</span>`;
       return arr.map(escapeHtml).join(', ');
     }
 
     function renderInventory(inv) {
       if (!inv || !inv.available) {
-        return `<div class="muted" style="margin:10px 0">${escapeHtml(inv?.message || 'No inventory yet.')}</div>`;
+        return `<div class="field-hint" style="margin:10px 0">${escapeHtml(inv?.message || 'No inventory detected yet.')}</div>`;
       }
       const s = inv.stack || {};
       const a = inv.apis || {};
       const samples = (inv.sampleEndpoints || []).map((e) =>
-        `<li><span class="pill">${escapeHtml(e.method)}</span> ${escapeHtml(e.url)}</li>`
-      ).join('') || '<li class="muted">No sample endpoints</li>';
+        `<li><span class="pill">${escapeHtml(e.method)}</span> <span>${escapeHtml(e.url)}</span></li>`
+      ).join('') || '<li style="color:var(--text-muted)">No sample endpoints</li>';
 
       return `
-        <div class="muted" style="margin:8px 0 4px">Latest scan: ${(inv.scannedAt || '').slice(0,19)} · Score ${inv.score}/100 · Risk ${escapeHtml(inv.risk || '—')}</div>
+        <div class="field-hint" style="margin:8px 0 6px">Latest scan: ${(inv.scannedAt || '').slice(0,19)} &middot; Score ${inv.score}/100 &middot; Risk <span class="pill ${/high|critical/i.test(inv.risk)?'high':/medium/i.test(inv.risk)?'med':''}">${escapeHtml(inv.risk || '—')}</span></div>
         <div class="info-grid">
           <div class="info-tile"><div class="label">Frontend</div><div class="value">${joinList(s.frontend)}</div></div>
           <div class="info-tile"><div class="label">Backend</div><div class="value">${joinList(s.backend)}</div></div>
@@ -277,7 +250,7 @@
           <div class="info-tile"><div class="label">CDN / Cloud</div><div class="value">${joinList([...(s.cdn||[]), ...(s.cloud||[])])}</div></div>
           <div class="info-tile"><div class="label">WAF</div><div class="value">${joinList(s.waf)}</div></div>
         </div>
-        <h3 style="margin:14px 0 8px;font-size:14px;color:var(--navy)">API & attack surface</h3>
+        <h3 style="margin:16px 0 8px;font-family:var(--font-mono);font-size:12px;text-transform:uppercase;color:var(--text-secondary)">API &amp; Attack Surface Telemetry</h3>
         <div class="info-grid">
           <div class="info-tile"><div class="label">APIs discovered</div><div class="value big">${a.endpointsDiscovered ?? 0}</div></div>
           <div class="info-tile"><div class="label">APIs / endpoints tested</div><div class="value big">${a.endpointsTested ?? 0}</div></div>
@@ -288,8 +261,9 @@
           <div class="info-tile"><div class="label">Pages</div><div class="value big">${a.pagesDiscovered ?? 0}</div></div>
           <div class="info-tile"><div class="label">Forms</div><div class="value big">${a.formsDiscovered ?? 0}</div></div>
         </div>
-        ${(a.apiBasesList || []).length ? `<div class="muted">API bases: ${a.apiBasesList.map(escapeHtml).join(' · ')}</div>` : ''}
-        <div style="margin-top:10px"><strong style="font-size:12px;color:var(--navy)">Sample API endpoints</strong>
+        ${(a.apiBasesList || []).length ? `<div class="field-hint" style="margin-top:6px">API bases: ${a.apiBasesList.map(escapeHtml).join(' · ')}</div>` : ''}
+        <div style="margin-top:12px">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);font-weight:600">Sample API Endpoints</div>
           <ul class="endpoint-list">${samples}</ul>
         </div>`;
     }
@@ -301,22 +275,28 @@
         return;
       }
       const trends = (data.trends || []).map(t =>
-        `${t.date.slice(0,10)}: score ${t.score}, findings ${t.findings}, risk ${t.risk}`
-      ).join('<br/>') || 'No scans';
+        `<span style="font-family:var(--font-mono);color:var(--text-muted)">${t.date.slice(0,10)}:</span> score <strong style="color:var(--text-primary)">${t.score}</strong>, findings <strong>${t.findings}</strong>, risk <span class="pill ${/high|critical/i.test(t.risk)?'high':/medium/i.test(t.risk)?'med':''}">${escapeHtml(t.risk)}</span>`
+      ).join('<br/>') || '<span style="color:var(--text-muted)">No prior scans to trend</span>';
+
       document.getElementById('detail').innerHTML = `
-        <strong><span class="code-id">${escapeHtml(data.project.code || 'project-???')}</span> ${escapeHtml(data.project.name)}</strong>
-        <div class="muted" style="margin:4px 0 8px">${escapeHtml(data.project.targetUrl || 'No target URL')}</div>
-        <div class="row-actions" style="margin:10px 0">
-          <button class="small danger" id="detailDeleteBtn">Delete Project</button>
-          <button class="small" id="detailRunBtn" ${data.project.targetUrl ? '' : 'disabled'}>Run</button>
-          <button class="small" id="detailRetestBtn" ${data.project.targetUrl && (data.scans || []).length ? '' : 'disabled'} title="Re-run using last scan settings, then compare New/Fixed/Unchanged">Re-run vs last scan</button>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong style="font-size:14px;color:var(--text-primary)"><span class="code-id">${escapeHtml(data.project.code || 'project-???')}</span> ${escapeHtml(data.project.name)}</strong>
+            <div style="font-family:var(--font-mono);color:var(--text-muted);margin-top:4px">${escapeHtml(data.project.targetUrl || 'No target URL')}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-dash small danger" id="detailDeleteBtn">Delete Project</button>
+            <button class="btn-dash small primary" id="detailRunBtn" ${data.project.targetUrl ? '' : 'disabled'}>Run</button>
+            <button class="btn-dash small" id="detailRetestBtn" ${data.project.targetUrl && (data.scans || []).length ? '' : 'disabled'} title="Re-run using last scan settings, then compare New/Fixed/Unchanged">Re-run vs last scan</button>
+          </div>
         </div>
-        <h3 style="margin:8px 0;font-size:14px;color:var(--navy)">Stack & languages</h3>
+        <h3 style="margin:14px 0 6px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;color:var(--text-secondary)">Stack &amp; Technologies Detected</h3>
         ${renderInventory(data.inventory)}
-        <h3 style="margin:16px 0 6px;font-size:14px;color:var(--navy)">Regression (latest vs previous)</h3>
-        <div class="muted" style="margin-bottom:6px">${data.regression?.regressed ? 'YES — ' : 'No — '}${escapeHtml(data.regression?.details || 'Need at least two scans to compare.')}</div>
+        <h3 style="margin:18px 0 6px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;color:var(--text-secondary)">Regression Tracking (Latest vs Previous)</h3>
+        <div class="field-hint" style="margin-bottom:6px">${data.regression?.regressed ? '<span style="color:var(--accent-red);font-weight:700">REGRESSION DETECTED — </span>' : '<span style="color:var(--accent-green);font-weight:700">NO REGRESSION — </span>'}${escapeHtml(data.regression?.details || 'Need at least two scans to compare.')}</div>
         ${renderRegressionCompare(data.baselineCompare)}
-        <div style="margin-top:14px"><strong>Trends</strong><br/>${trends}</div>`;
+        <div style="margin-top:16px"><strong style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;color:var(--text-secondary)">Trends History</strong><br/><div style="margin-top:6px">${trends}</div></div>`;
+
       const del = document.getElementById('detailDeleteBtn');
       if (del) del.onclick = () => deleteProject(data.project.id, data.project.name);
       const runBtn = document.getElementById('detailRunBtn');
@@ -340,7 +320,6 @@
         return;
       }
       const scans = Array.isArray(data.scans) ? data.scans.slice() : [];
-      // list is oldest→newest; latest is last
       const latest = scans.length ? scans[scans.length - 1] : null;
       if (!latest?.id) {
         alert('No previous scan to retest against. Use Run first.');
@@ -425,14 +404,14 @@
       localStorage.removeItem('secureassess.lastJob');
 
       document.getElementById('detail').innerHTML =
-        `<span class="muted">Retest started against last scan <span class="code-id">${escapeHtml(latest.code || latest.id)}</span>. ` +
-        `Job ${escapeHtml(out.jobId)}. When complete, reopen this project for New / Fixed / Unchanged.</span>`;
+        `<span style="color:var(--text-secondary)">Retest started against last scan <span class="code-id">${escapeHtml(latest.code || latest.id)}</span>. ` +
+        `Job <span class="code-id">${escapeHtml(out.jobId)}</span>. When complete, reopen this project for New / Fixed / Unchanged.</span>`;
       trackBackgroundScan();
     }
 
     function renderRegressionCompare(cmp) {
       if (!cmp || cmp.ok === false) {
-        return `<div class="muted" style="margin-top:8px">${escapeHtml(cmp?.error || 'Run two assessments to see New / Fixed / Unchanged findings.')}</div>`;
+        return `<div class="field-hint" style="margin-top:8px">${escapeHtml(cmp?.error || 'Run two assessments to see New / Fixed / Unchanged findings.')}</div>`;
       }
       const s = cmp.summary || {
         newCount: (cmp.newFindings || []).length,
@@ -468,28 +447,28 @@
       const body = rows.slice(0, 80).map((r) => `
         <tr>
           <td>${badge(r.delta)}</td>
-          <td>${escapeHtml(r.title || 'Finding')}</td>
+          <td><strong style="color:var(--text-primary)">${escapeHtml(r.title || 'Finding')}</strong></td>
           <td><span class="pill ${String(r.severity||'').toLowerCase()==='high'||String(r.severity||'').toLowerCase()==='critical'?'high':'med'}">${escapeHtml(r.severity || '—')}${r.previousSeverity ? ' ← ' + escapeHtml(r.previousSeverity) : ''}</span></td>
-          <td class="muted" style="font-family:Consolas,monospace;max-width:280px;word-break:break-all">${escapeHtml(r.endpoint || '—')}</td>
-        </tr>`).join('') || '<tr><td colspan="4" class="muted">No issue findings to compare.</td></tr>';
+          <td style="font-family:var(--font-mono);color:var(--text-secondary);max-width:280px;word-break:break-all">${escapeHtml(r.endpoint || '—')}</td>
+        </tr>`).join('') || '<tr><td colspan="4" style="color:var(--text-muted);padding:10px;">No issue findings to compare.</td></tr>';
 
       return `
-        <div class="muted">Comparing <span class="code-id">${escapeHtml(baseLabel)}</span> → <span class="code-id">${escapeHtml(currLabel)}</span>
-          · score Δ ${Number(cmp.delta?.score || 0) >= 0 ? '+' : ''}${escapeHtml(cmp.delta?.score ?? 0)}
-          · net fixed ${s.net >= 0 ? '+' : ''}${escapeHtml(s.net)}</div>
+        <div class="field-hint">Comparing <span class="code-id">${escapeHtml(baseLabel)}</span> &rarr; <span class="code-id">${escapeHtml(currLabel)}</span>
+          &middot; score &Delta; ${Number(cmp.delta?.score || 0) >= 0 ? '+' : ''}${escapeHtml(cmp.delta?.score ?? 0)}
+          &middot; net fixed ${s.net >= 0 ? '+' : ''}${escapeHtml(s.net)}</div>
         <div class="delta-summary">
           <div class="delta-tile new"><div class="n">${escapeHtml(s.newCount ?? 0)}</div><div class="l">New</div></div>
           <div class="delta-tile fixed"><div class="n">${escapeHtml(s.fixedCount ?? 0)}</div><div class="l">Fixed</div></div>
           <div class="delta-tile"><div class="n">${escapeHtml(s.unchangedCount ?? 0)}</div><div class="l">Unchanged</div></div>
-          <div class="delta-tile"><div class="n">${escapeHtml(s.severityChangedCount ?? 0)}</div><div class="l">Severity Δ</div></div>
+          <div class="delta-tile"><div class="n">${escapeHtml(s.severityChangedCount ?? 0)}</div><div class="l">Severity &Delta;</div></div>
         </div>
         <div class="reg-table-wrap">
-          <table>
+          <table class="dash-table">
             <thead><tr><th>Delta</th><th>Finding</th><th>Severity</th><th>Endpoint</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
         </div>
-        ${rows.length > 80 ? `<div class="muted" style="margin-top:6px">Showing first 80 of ${rows.length} rows.</div>` : ''}`;
+        ${rows.length > 80 ? `<div class="field-hint" style="margin-top:6px">Showing first 80 of ${rows.length} rows.</div>` : ''}`;
     }
 
     function escapeHtml(s) {
@@ -563,6 +542,55 @@
       };
       tick();
     }
+
+    (function initThemeToggle() {
+      const THEME_KEY = 'secureassess.theme';
+      const sunSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+      const moonSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+      function getBtn() {
+        return document.getElementById('themeToggleBtn');
+      }
+
+      function apply(theme) {
+        const isLight = theme === 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        if (document.body) document.body.setAttribute('data-theme', theme);
+        const btn = getBtn();
+        if (btn) {
+          btn.innerHTML = isLight ? moonSvg : sunSvg;
+          btn.title = isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode';
+          btn.setAttribute('aria-label', isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode');
+        }
+      }
+
+      function toggle() {
+        const active = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = active === 'dark' ? 'light' : 'dark';
+        try {
+          localStorage.setItem(THEME_KEY, next);
+        } catch (e) {}
+        apply(next);
+      }
+
+      function setup() {
+        const btn = getBtn();
+        if (btn) {
+          btn.onclick = toggle;
+        }
+        let currentTheme = 'dark';
+        try {
+          currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
+        } catch (e) {}
+        apply(currentTheme);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setup);
+      } else {
+        setup();
+      }
+    })();
 
     loadHealth(); loadProjects(); loadScans(); trackBackgroundScan();
   </script>
